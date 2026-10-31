@@ -1,18 +1,18 @@
 {
   "name": "hubsoft-mcp",
-  "version": "0.2.1",
-  "description": "Servidor MCP (não oficial) para o ERP Hubsoft — use o Claude com as permissões do seu próprio usuário do Hubsoft.",
-  "main": "dist/index.js",
+  "version": "0.3.0",
+  "description": "MCP, skill e CLI (não oficiais) para o ERP Hubsoft — use agentes de IA com as permissões do seu próprio usuário.",
+  "main": "server/hubsoft-mcp.mjs",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/bundle.mjs",
     "dev": "tsx src/index.ts",
     "probe": "tsx src/probe.ts",
-    "inspect": "npx @modelcontextprotocol/inspector node dist/index.js",
+    "inspect": "npx @modelcontextprotocol/inspector node server/hubsoft-mcp.mjs",
     "prepublishOnly": "npm run build",
     "schema": "tsx src/schema.ts",
-    "test": "npm run build && node test/e2e.mjs",
+    "test": "npm run build && node test/e2e.mjs && node test/cli.mjs",
     "pack": "npm run build && npx -y @anthropic-ai/mcpb pack . hubsoft-mcp.mcpb",
-    "prepare": "npm run build"
+    "prebuild": "node scripts/version.mjs"
   },
   "keywords": [
     "mcp",
@@ -26,26 +26,26 @@
   ],
   "author": "Marcelo",
   "license": "MIT",
-  "dependencies": {
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "esbuild": "^0.28.2",
+    "graphql": "^17.0.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "zod": "^4.6.7"
   },
-  "devDependencies": {
-    "@types/node": "^26.6.6",
-    "graphql": "^17.0.2",
-    "tsx": "^4.23.15",
-    "typescript": "^7.0.2"
-  },
   "type": "module",
   "bin": {
-    "hubsoft-mcp": "dist/index.js",
-    "hubsoft-mcp-probe": "dist/probe.js",
-    "hubsoft-mcp-schema": "dist/schema.js"
+    "hubsoft-mcp": "server/hubsoft-mcp.mjs",
+    "hubsoft": "skills/hubsoft/scripts/hubsoft.mjs"
   },
   "files": [
-    "dist",
+    "server",
+    "skills",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "PRIVACY.md"
   ],
   "engines": {
     "node": ">=18"

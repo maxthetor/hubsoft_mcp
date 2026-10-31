@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "hubsoft-mcp",
   "display_name": "Hubsoft (não oficial)",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Consulte clientes, faturas, atendimentos e OS do ERP Hubsoft com as permissões do seu próprio usuário.",
   "long_description": "Servidor MCP não oficial para o Hubsoft, ERP de provedores de internet. Cada pessoa usa o próprio login do Hubsoft; as credenciais ficam só no computador dela. Modo somente leitura por padrão.",
   "author": {
@@ -18,11 +18,11 @@
   ],
   "server": {
     "type": "node",
-    "entry_point": "dist/index.js",
+    "entry_point": "server/hubsoft-mcp.mjs",
     "mcp_config": {
       "command": "node",
       "args": [
-        "${__dirname}/dist/index.js"
+        "${__dirname}/server/hubsoft-mcp.mjs"
       ],
       "env": {
         "HUBSOFT_URL": "${user_config.url}",
@@ -40,6 +40,10 @@
     {
       "name": "hubsoft_situacao_cliente",
       "description": "Visão 360° do cliente: cadastro, serviços, PPPoE, ONU, RADIUS e faturas em aberto"
+    },
+    {
+      "name": "hubsoft_servicos_por_status",
+      "description": "Serviços por status: bloqueados/suspensos (filtro no servidor), com débito vencido opcional"
     },
     {
       "name": "hubsoft_buscar_cliente",
@@ -152,5 +156,9 @@
     "url": "https://github.com/maxthetor/hubsoft_mcp"
   },
   "homepage": "https://github.com/maxthetor/hubsoft_mcp",
-  "support": "https://github.com/maxthetor/hubsoft_mcp/issues"
+  "support": "https://github.com/maxthetor/hubsoft_mcp/issues",
+  "icon": "icon.png",
+  "privacy_policies": [
+    "https://github.com/maxthetor/hubsoft_mcp/blob/main/PRIVACY.md"
+  ]
 }

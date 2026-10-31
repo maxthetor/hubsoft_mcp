@@ -25,6 +25,15 @@ const srv = http.createServer((q, r) => { let b = ""; q.on("data", d => b += d);
     return send({ data: { cliente: { codigo_cliente: 77, nome_razaosocial: "Fulano", servicos: [
       { id_cliente_servico: 1, data_cancelamento: null, cliente_servico_autenticacao: { login: "fulano", password: "segredo123", status_conexao_radius: { status: "online", ipv4: "100.64.0.9" } } },
       { id_cliente_servico: 2, data_cancelamento: "2025-01-01" } ] } } }); }
+  if (q.url.startsWith("/api/v1/integracao/cliente/todos")) {
+    const u = new URL(q.url, "http://x"); const st = u.searchParams.get("servico_status"); const pg = Number(u.searchParams.get("pagina"));
+    if (st !== "suspenso_debito") return send({ status: "success", paginacao: { ultima_pagina: 0 }, clientes: [] });
+    const cli = (cod, id, susp) => ({ codigo_cliente: cod, nome_razaosocial: "Cliente " + cod, telefone_primario: "85999990000", rg: "SECRETO",
+      servicos: [{ id_cliente_servico: id, nome: "PLANO 500M", valor: 99.9, status: "Suspenso por Débito", status_prefixo: "suspenso_debito", login: "l" + cod, senha: "pppoe!", phy_addr: "ALCL0001", data_ultima_suspensao: susp },
+                 { id_cliente_servico: id + 1000, nome: "OUTRO", status_prefixo: "servico_habilitado" }] });
+    const pages = [[cli(77, 1, `${br(dia(-10)).split("/").reverse().join("-")} 08:10:22`)], [cli(78, 2, null)]];
+    return send({ status: "success", paginacao: { primeira_pagina: 0, ultima_pagina: 1, pagina_atual: pg, total_registros: 2 }, clientes: pages[pg] ?? [] });
+  }
   if (q.url.startsWith("/api/v1/integracao/cliente/financeiro")) return send({ status: "success", faturas: [
     faturaReal(10, dia(-3), "vencido"),                                   // vencida
     ...Array.from({ length: 11 }, (_, i) => faturaReal(20 + i, dia(5 + 30 * i), "aguardando")), // carnê futuro
@@ -33,7 +42,7 @@ const srv = http.createServer((q, r) => { let b = ""; q.on("data", d => b += d);
 }); }).listen(0);
 await new Promise(r => srv.once("listening", r));
 
-const t = new StdioClientTransport({ command: "node", args: ["dist/index.js"], stderr: "pipe", env: { ...process.env,
+const t = new StdioClientTransport({ command: "node", args: ["server/hubsoft-mcp.mjs"], stderr: "pipe", env: { ...process.env,
   HUBSOFT_URL: `http://127.0.0.1:${srv.address().port}`, HUBSOFT_CLIENT_ID: "1", HUBSOFT_CLIENT_SECRET: "s", HUBSOFT_USERNAME: "u", HUBSOFT_PASSWORD: "p" } });
 const c = new Client({ name: "e2e", version: "0" }); await c.connect(t);
 const names = (await c.listTools()).tools.map(x => x.name);
@@ -66,6 +75,16 @@ const fd = await c.callTool({ name: "hubsoft_faturas_cliente", arguments: { busc
 assert.ok(JSON.parse(fd.content[0].text).faturas[0].detalhamento, "detalhado=true devolve a fatura completa");
 assert.ok(!r.content[0].text.includes("segredo123"));
 assert.ok(calls.some(x => x.includes("financeiro?busca=codigo_cliente&termo_busca=77&apenas_pendente=sim&limit=60")));
+
+const st = await c.callTool({ name: "hubsoft_servicos_por_status", arguments: { incluir_faturas_vencidas: true } });
+const so = JSON.parse(st.content[0].text);
+assert.equal(so.total, 2, "dois serviços suspensos, em duas páginas");
+assert.deepEqual(so.por_status, { suspenso_debito: 2 });
+assert.equal(so.servicos[0].dias_suspenso, 10, "ordenado por dias suspenso");
+assert.equal(so.servicos[0].debito_vencido.faturas, 1);
+assert.equal(so.debito_vencido_total, 230.8);
+assert.ok(!st.content[0].text.includes("SECRETO") && !st.content[0].text.includes("pppoe!"), "sem RG nem senha na lista");
+assert.ok(calls.some(x => x.includes("cliente/todos?servico_status=suspenso_debito&itens_por_pagina=100&pagina=1")));
 
 const g = await c.callTool({ name: "hubsoft_graphql", arguments: { query: "mutation { x }" } });
 assert.equal(g.isError, true, "mutation deve ser bloqueada");

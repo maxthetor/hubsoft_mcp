@@ -14,3 +14,14 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: Bundles versionados estão em dia
+        run: git diff --exit-code -- server/ skills/hubsoft/scripts/ src/version.ts
+      - name: Versões iguais em package.json, manifest.json e plugin.json
+        run: |
+          P=$(node -p "require('./package.json').version")
+          M=$(node -p "require('./manifest.json').version")
+          C=$(node -p "require('./.claude-plugin/plugin.json').version")
+          echo "package=$P manifest=$M plugin=$C"
+          [ "$P" = "$M" ] && [ "$P" = "$C" ]
+      - name: Validar plugin e marketplace do Claude
+        run: npx -y @anthropic-ai/claude-code@latest plugin validate .

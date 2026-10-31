@@ -26,8 +26,9 @@ jobs:
         run: |
           V="v$(node -p "require('./package.json').version")"
           M="v$(node -p "require('./manifest.json').version")"
-          if [ "$V" != "$M" ]; then
-            echo "::error::Versões diferentes: package.json=$V manifest.json=$M"; exit 1
+          C="v$(node -p "require('./.claude-plugin/plugin.json').version")"
+          if [ "$V" != "$M" ] || [ "$V" != "$C" ]; then
+            echo "::error::Versões diferentes: package.json=$V manifest.json=$M plugin.json=$C"; exit 1
           fi
           echo "tag=$V" >> "$GITHUB_OUTPUT"
           if gh release view "$V" >/dev/null 2>&1; then
@@ -38,11 +39,11 @@ jobs:
       - if: steps.ver.outputs.skip != 'true'
         run: npm ci && npm test
 
-      - name: Gerar extensão .mcpb (só dependências de produção)
+      - name: Gerar extensão .mcpb e pacote da skill
         if: steps.ver.outputs.skip != 'true'
         run: |
-          npm prune --omit=dev
           npx -y @anthropic-ai/mcpb pack . hubsoft-mcp.mcpb
+          (cd skills && zip -qr ../hubsoft-skill.zip hubsoft)
 
       - if: steps.ver.outputs.skip != 'true'
         uses: softprops/action-gh-release@v2
@@ -50,5 +51,7 @@ jobs:
           tag_name: ${{ steps.ver.outputs.tag }}
           target_commitish: ${{ github.sha }}
           name: hubsoft-mcp ${{ steps.ver.outputs.tag }}
-          files: hubsoft-mcp.mcpb
+          files: |
+            hubsoft-mcp.mcpb
+            hubsoft-skill.zip
           generate_release_notes: true

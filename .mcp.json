@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "hubsoft": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/server/hubsoft-mcp.mjs"],
+      "env": {
+        "HUBSOFT_URL": "${user_config.url}",
+        "HUBSOFT_CLIENT_ID": "${user_config.client_id}",
+        "HUBSOFT_CLIENT_SECRET": "${user_config.client_secret}",
+        "HUBSOFT_USERNAME": "${user_config.username}",
+        "HUBSOFT_PASSWORD": "${user_config.password}",
+        "HUBSOFT_READ_ONLY": "${user_config.read_only}",
+        "HUBSOFT_GRAPHQL_PATH": "${user_config.graphql_path}"
+      }
+    }
+  }
+}

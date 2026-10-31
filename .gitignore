@@ -5,3 +5,5 @@ dist/
 .env.*
 !.env.example
 hubsoft-schema.json
+*.tgz
+*.zip

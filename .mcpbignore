@@ -1,8 +1,20 @@
+# A extensão só precisa de: manifest.json, icon.png, server/hubsoft-mcp.mjs, README, LICENSE, PRIVACY
+node_modules/
 src/
+dist/
 test/
 scripts/
+skills/
 .github/
+.claude-plugin/
+.mcp.json
 tsconfig.json
+package.json
+package-lock.json
 .env*
 *.mcpb
+*.tgz
+*.zip
 hubsoft-schema.json
+.gitignore
+.mcpbignore

@@ -1,0 +1,14 @@
+{
+  "name": "hubsoft-mcp",
+  "description": "Plugin não oficial do ERP Hubsoft (provedores de internet) para o Claude",
+  "owner": { "name": "Marcelo", "url": "https://github.com/maxthetor" },
+  "plugins": [
+    {
+      "name": "hubsoft",
+      "source": "./",
+      "description": "MCP + skill do Hubsoft: clientes, bloqueados, PPPoE, ONU, RADIUS, faturas, atendimentos e OS",
+      "category": "telecom",
+      "tags": ["hubsoft", "isp", "provedor", "erp"]
+    }
+  ]
+}

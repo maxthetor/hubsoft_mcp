@@ -1,0 +1,71 @@
+{
+  "name": "hubsoft",
+  "displayName": "Hubsoft (não oficial)",
+  "version": "0.3.0",
+  "description": "Consulte o ERP Hubsoft de provedores de internet com as permissões do seu próprio usuário: clientes, serviços bloqueados, PPPoE, ONU, RADIUS, faturas, atendimentos e OS.",
+  "author": {
+    "name": "Marcelo",
+    "url": "https://github.com/maxthetor"
+  },
+  "homepage": "https://github.com/maxthetor/hubsoft_mcp#readme",
+  "repository": "https://github.com/maxthetor/hubsoft_mcp",
+  "license": "MIT",
+  "keywords": [
+    "hubsoft",
+    "isp",
+    "provedor",
+    "erp",
+    "telecom",
+    "mcp"
+  ],
+  "documentationUrl": "https://github.com/maxthetor/hubsoft_mcp#readme",
+  "supportUrl": "https://github.com/maxthetor/hubsoft_mcp/issues",
+  "privacyPolicyUrl": "https://github.com/maxthetor/hubsoft_mcp/blob/main/PRIVACY.md",
+  "userConfig": {
+    "url": {
+      "type": "string",
+      "title": "URL da API do Hubsoft",
+      "description": "Ex.: https://api.seuprovedor.hubsoft.com.br",
+      "required": true
+    },
+    "client_id": {
+      "type": "string",
+      "title": "Client ID",
+      "description": "Fornecido pelo administrador do provedor",
+      "required": true
+    },
+    "client_secret": {
+      "type": "string",
+      "title": "Client secret",
+      "description": "Fornecido pelo administrador do provedor",
+      "required": true,
+      "sensitive": true
+    },
+    "username": {
+      "type": "string",
+      "title": "Seu usuário de API do Hubsoft",
+      "description": "Use o SEU login (sem 2FA): o acesso segue as suas permissões",
+      "required": true
+    },
+    "password": {
+      "type": "string",
+      "title": "Sua senha do Hubsoft",
+      "description": "Guardada no armazenamento seguro do sistema",
+      "required": true,
+      "sensitive": true
+    },
+    "read_only": {
+      "type": "boolean",
+      "title": "Somente leitura",
+      "description": "Desmarque para habilitar desbloqueio em confiança e envio de faturas",
+      "default": true
+    },
+    "graphql_path": {
+      "type": "string",
+      "title": "Caminho GraphQL",
+      "description": "Padrão do Hubsoft: /graphql/v1. Use off para desativar",
+      "default": "/graphql/v1"
+    }
+  },
+  "icon": "./.claude-plugin/icon.png"
+}
