@@ -20,7 +20,9 @@
     "isp",
     "provedor",
     "claude",
-    "erp"
+    "erp",
+    "mcp-server",
+    "model-context-protocol"
   ],
   "author": "Marcelo",
   "license": "MIT",
