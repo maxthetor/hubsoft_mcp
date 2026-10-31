@@ -104,7 +104,7 @@ npm run inspect   # MCP Inspector
 npm run pack      # gera hubsoft-mcp.mcpb
 ```
 
-**Release:** `git tag v0.2.0 && git push --tags`. O GitHub Actions roda os testes e publica o `.mcpb` na página de releases.
+**Release:** altere `version` no `package.json` e no `manifest.json` e faça push na `main`. O GitHub Actions roda os testes, cria a tag e publica o `.mcpb` na página de releases.
 
 ## Segurança e LGPD
 
