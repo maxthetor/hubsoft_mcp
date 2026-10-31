@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { HubsoftClient } from "../client.js";
 import { API, run } from "../util.js";
+import { resumoFinanceiro } from "../faturas.js";
 
 const ENDERECO = `endereco numero complemento bairro cep cidade { nome estado { sigla } }`;
 
@@ -44,7 +45,9 @@ export function registerSituacao(server: McpServer, hs: HubsoftClient) {
       description:
         "Visão 360° de um cliente numa chamada: cadastro, serviços/planos com status, " +
         "endereço de instalação, login PPPoE, MAC/serial da ONU, VLAN, interface/OLT, " +
-        "sessão RADIUS (online/offline, IP, NAS) e faturas em aberto. " +
+        "sessão RADIUS (online/offline, IP, NAS) e resumo financeiro (faturas vencidas com " +
+        "dias de atraso, PIX e linha digitável, próxima a vencer e total das demais). " +
+        "Para o detalhamento de uma fatura use hubsoft_faturas_cliente com detalhado=true. " +
         "Use como primeira ferramenta quando o usuário perguntar sobre um cliente.",
       inputSchema: {
         cpf_cnpj: z.string().optional().describe("CPF ou CNPJ (com ou sem máscara)."),
@@ -101,16 +104,9 @@ export function registerSituacao(server: McpServer, hs: HubsoftClient) {
             busca: "codigo_cliente",
             termo_busca: String(cliente.codigo_cliente),
             apenas_pendente: "sim",
-            limit: 24,
+            limit: 60,
           });
-          const lista: any[] = f?.faturas ?? [];
-          const hoje = new Date().toISOString().slice(0, 10);
-          faturas_em_aberto = {
-            quantidade: lista.length,
-            vencidas: lista.filter((x) => String(x.data_vencimento ?? "").slice(0, 10) < hoje).length,
-            valor_total: Number(lista.reduce((s, x) => s + Number(x.valor ?? 0), 0).toFixed(2)),
-            faturas: lista,
-          };
+          faturas_em_aberto = resumoFinanceiro(f?.faturas ?? []);
         } catch (e) {
           faturas_em_aberto = { erro: (e as Error).message };
         }

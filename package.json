@@ -1,6 +1,6 @@
 {
   "name": "hubsoft-mcp",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Servidor MCP (não oficial) para o ERP Hubsoft — use o Claude com as permissões do seu próprio usuário do Hubsoft.",
   "main": "dist/index.js",
   "scripts": {

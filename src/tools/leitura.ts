@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { HubsoftClient } from "../client.js";
 import { API, run } from "../util.js";
+import { resumirFatura } from "../faturas.js";
 
 const READ = { readOnlyHint: true, openWorldHint: true } as const;
 
@@ -54,8 +55,8 @@ export function registerLeitura(server: McpServer, hs: HubsoftClient) {
     {
       title: "Faturas do cliente",
       description:
-        "Lista faturas do cliente (em aberto e/ou histórico), com vencimento, valor, " +
-        "situação, linha digitável e link/PIX quando disponíveis.",
+        "Lista faturas do cliente (em aberto e/ou histórico): valor, vencimento, status, " +
+        "se está vencida e há quantos dias, PIX copia-e-cola, linha digitável e link do PDF.",
       inputSchema: {
         busca,
         termo_busca: termo,
@@ -64,19 +65,29 @@ export function registerLeitura(server: McpServer, hs: HubsoftClient) {
           .boolean()
           .optional()
           .describe("Se true, retorna apenas faturas em aberto."),
+        detalhado: z
+          .boolean()
+          .optional()
+          .describe(
+            "Se true, devolve a fatura completa (itens, descontos, nota fiscal, dados do " +
+              "boleto e cadastro). Padrão: resumo enxuto com valor, vencimento, dias de atraso, " +
+              "PIX, linha digitável e link do PDF.",
+          ),
       },
       annotations: READ,
     },
-    async ({ busca, termo_busca, limit, apenas_pendente }) =>
-      run(max, () =>
-        hs.get(`${API}/cliente/financeiro`, {
+    async ({ busca, termo_busca, limit, apenas_pendente, detalhado }) =>
+      run(max, async () => {
+        const r = await hs.get(`${API}/cliente/financeiro`, {
           busca,
           termo_busca,
           limit,
           apenas_pendente:
             apenas_pendente === undefined ? undefined : apenas_pendente ? "sim" : "nao",
-        }),
-      ),
+        });
+        if (detalhado || !Array.isArray(r?.faturas)) return r;
+        return { ...r, faturas: r.faturas.map((f: any) => resumirFatura(f)) };
+      }),
   );
 
   server.registerTool(

@@ -9,7 +9,7 @@ import { registerGraphql } from "./tools/graphql.js";
 import { registerSituacao } from "./tools/situacao.js";
 import { setExposeSecrets } from "./util.js";
 
-const VERSION = "0.2.0";
+const VERSION = "0.2.1";
 
 async function main() {
   const cfg = loadConfig();
