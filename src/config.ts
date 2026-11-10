@@ -1,13 +1,20 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 /**
- * Configuração lida das variáveis de ambiente.
+ * Configuração de UM servidor Hubsoft.
  *
- * Cada usuário configura o MCP com o PRÓPRIO login do Hubsoft
- * (HUBSOFT_USERNAME / HUBSOFT_PASSWORD). URL, client_id e client_secret
- * são do provedor e podem ser compartilhados internamente.
+ * Cada usuário configura o MCP com o PRÓPRIO login do Hubsoft. URL, client_id e
+ * client_secret são do provedor. Um provedor pode ter várias bases (servidores),
+ * cada uma com nome e descrição; a descrição ajuda o agente a escolher a base
+ * certa ("pessoa física" → base_pf).
  */
 export interface HubsoftConfig {
+  /** Apelido do servidor (ex.: base_pf). Usado no parâmetro `servidor`. */
+  nome: string;
+  /** Descrição livre (ex.: "Clientes pessoa física"). */
+  descricao?: string;
   baseUrl: string;
   clientId: string;
   clientSecret: string;
@@ -15,7 +22,7 @@ export interface HubsoftConfig {
   password: string;
   /** Quando true (padrão), ferramentas de escrita não são registradas. */
   readOnly: boolean;
-  /** Caminho do endpoint GraphQL (ex.: /graphql). Vazio = desativado. */
+  /** Caminho do endpoint GraphQL (ex.: /graphql/v1). Vazio = desativado. */
   graphqlPath: string;
   /** Tamanho máximo (caracteres) da resposta devolvida ao modelo. */
   maxResponseChars: number;
@@ -23,21 +30,16 @@ export interface HubsoftConfig {
   exposeSecrets: boolean;
 }
 
+/** Quantidade de servidores configuráveis por variáveis numeradas (HUBSOFT_2_*, …). */
+export const MAX_SLOTS = 9;
+
+/** Arquivo padrão com a lista de servidores (opcional). */
+export const ARQUIVO_PADRAO = join(homedir(), ".config", "hubsoft", "servidores.json");
+
 /** Lê uma variável; ignora placeholders não substituídos como "${user_config.x}". */
 function env(name: string): string | undefined {
   const v = process.env[name]?.trim();
   if (!v || /^\$\{[^}]+\}$/.test(v)) return undefined;
-  return v;
-}
-
-function required(name: string): string {
-  const v = env(name);
-  if (!v) {
-    throw new Error(
-      `Variável de ambiente obrigatória ausente: ${name}. ` +
-        `Veja o README para configurar o hubsoft-mcp.`,
-    );
-  }
   return v;
 }
 
@@ -47,23 +49,160 @@ function bool(name: string, def: boolean): boolean {
   return ["1", "true", "sim", "yes", "on"].includes(v);
 }
 
-export function loadConfig(): HubsoftConfig {
+function graphqlPath(v: string | undefined): string {
+  const s = (v ?? "").trim();
+  if (s.toLowerCase() === "off") return "";
+  return s || "/graphql/v1";
+}
+
+/** Normaliza o apelido: minúsculas, sem acentos, só [a-z0-9_-]. */
+export function normalizarNome(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+/** Substitui "{env:VAR}" pelo valor da variável de ambiente (para não gravar segredos no JSON). */
+function expandEnv(v: unknown): string | undefined {
+  if (typeof v !== "string") return v === undefined || v === null ? undefined : String(v);
+  return v.replace(/\{env:([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, n) => process.env[n] ?? "").trim() || undefined;
+}
+
+interface Bruto {
+  origem: string;
+  nome?: string;
+  descricao?: string;
+  url?: string;
+  client_id?: string;
+  client_secret?: string;
+  usuario?: string;
+  senha?: string;
+  graphql_path?: string;
+}
+
+function globais() {
   return {
-    baseUrl: required("HUBSOFT_URL").replace(/\/+$/, ""),
-    clientId: required("HUBSOFT_CLIENT_ID"),
-    clientSecret: required("HUBSOFT_CLIENT_SECRET"),
-    username: required("HUBSOFT_USERNAME"),
-    password: required("HUBSOFT_PASSWORD"),
     readOnly: bool("HUBSOFT_READ_ONLY", true),
-    // Padrão do Hubsoft: /graphql/v1. Use "off" para desativar.
-    graphqlPath: (() => {
-      const v = env("HUBSOFT_GRAPHQL_PATH") ?? "";
-      if (v.toLowerCase() === "off") return "";
-      return v || "/graphql/v1";
-    })(),
     maxResponseChars: Number(env("HUBSOFT_MAX_RESPONSE_CHARS") ?? 60000),
     exposeSecrets: bool("HUBSOFT_EXPOR_SENHAS", false),
   };
+}
+
+function lerArquivo(caminho: string): Bruto[] {
+  let json: any;
+  try {
+    json = JSON.parse(readFileSync(caminho, "utf8"));
+  } catch (e) {
+    throw new Error(`Não foi possível ler ${caminho}: ${(e as Error).message}`);
+  }
+  const lista = Array.isArray(json) ? json : json?.servidores;
+  if (!Array.isArray(lista)) {
+    throw new Error(`${caminho}: esperado {"servidores": [ ... ]}`);
+  }
+  return lista.map((s: any, i: number) => ({
+    origem: `${caminho} (item ${i + 1})`,
+    nome: expandEnv(s.nome),
+    descricao: expandEnv(s.descricao),
+    url: expandEnv(s.url),
+    client_id: expandEnv(s.client_id),
+    client_secret: expandEnv(s.client_secret),
+    usuario: expandEnv(s.usuario ?? s.username),
+    senha: expandEnv(s.senha ?? s.password),
+    graphql_path: expandEnv(s.graphql_path),
+  }));
+}
+
+function lerSlot(prefixo: string, origem: string): Bruto | undefined {
+  const url = env(`${prefixo}URL`);
+  if (!url) return undefined;
+  return {
+    origem,
+    nome: env(`${prefixo}NOME`),
+    descricao: env(`${prefixo}DESCRICAO`),
+    url,
+    client_id: env(`${prefixo}CLIENT_ID`),
+    client_secret: env(`${prefixo}CLIENT_SECRET`),
+    usuario: env(`${prefixo}USERNAME`),
+    senha: env(`${prefixo}PASSWORD`),
+    graphql_path: env(`${prefixo}GRAPHQL_PATH`),
+  };
+}
+
+/**
+ * Carrega todos os servidores configurados, nesta ordem:
+ *  1. variáveis sem número (HUBSOFT_URL, HUBSOFT_NOME…) — servidor 1, compatível com a v0.3;
+ *  2. variáveis numeradas HUBSOFT_2_URL … HUBSOFT_9_URL (e HUBSOFT_1_* como alternativa ao 1);
+ *  3. arquivo JSON em HUBSOFT_CONFIG ou ~/.config/hubsoft/servidores.json.
+ */
+export function loadServers(): HubsoftConfig[] {
+  const brutos: Bruto[] = [];
+  const s0 = lerSlot("HUBSOFT_", "variáveis HUBSOFT_*");
+  if (s0) brutos.push(s0);
+  for (let i = 1; i <= MAX_SLOTS; i++) {
+    const s = lerSlot(`HUBSOFT_${i}_`, `variáveis HUBSOFT_${i}_*`);
+    if (s) brutos.push(s);
+  }
+  const arquivo = env("HUBSOFT_CONFIG") ?? (existsSync(ARQUIVO_PADRAO) ? ARQUIVO_PADRAO : undefined);
+  if (arquivo) brutos.push(...lerArquivo(arquivo));
+
+  if (!brutos.length) {
+    throw new Error(
+      "Nenhum servidor Hubsoft configurado. Defina HUBSOFT_URL, HUBSOFT_CLIENT_ID, " +
+        "HUBSOFT_CLIENT_SECRET, HUBSOFT_USERNAME e HUBSOFT_PASSWORD, ou crie " +
+        `${ARQUIVO_PADRAO}. Veja o README.`,
+    );
+  }
+
+  const g = globais();
+  const vistos = new Set<string>();
+  return brutos.map((b, i) => {
+    const faltando = (
+      [
+        ["url", b.url],
+        ["client_id", b.client_id],
+        ["client_secret", b.client_secret],
+        ["usuário", b.usuario],
+        ["senha", b.senha],
+      ] as const
+    )
+      .filter(([, v]) => !v)
+      .map(([k]) => k);
+    if (faltando.length) {
+      throw new Error(`Servidor em ${b.origem}: faltando ${faltando.join(", ")}.`);
+    }
+    let nome = normalizarNome(b.nome ?? "") || (i === 0 ? "principal" : `servidor_${i + 1}`);
+    if (["todos", "all"].includes(nome)) throw new Error(`Nome de servidor reservado: "${nome}".`);
+    if (vistos.has(nome)) throw new Error(`Nome de servidor repetido: "${nome}" (${b.origem}).`);
+    vistos.add(nome);
+    return {
+      nome,
+      descricao: b.descricao,
+      baseUrl: b.url!.replace(/\/+$/, ""),
+      clientId: b.client_id!,
+      clientSecret: b.client_secret!,
+      username: b.usuario!,
+      password: b.senha!,
+      graphqlPath: graphqlPath(b.graphql_path ?? env("HUBSOFT_GRAPHQL_PATH")),
+      ...g,
+    };
+  });
+}
+
+/**
+ * Configuração de um único servidor (diagnóstico, export de esquema).
+ * Usa HUBSOFT_SERVIDOR para escolher; senão, o primeiro.
+ */
+export function loadConfig(): HubsoftConfig {
+  const lista = loadServers();
+  const alvo = env("HUBSOFT_SERVIDOR");
+  if (!alvo) return lista[0];
+  const s = lista.find((x) => x.nome === normalizarNome(alvo));
+  if (!s) throw new Error(`Servidor "${alvo}" não encontrado. Disponíveis: ${lista.map((x) => x.nome).join(", ")}`);
+  return s;
 }
 
 /**

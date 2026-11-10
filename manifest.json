@@ -2,8 +2,8 @@
   "manifest_version": "0.2",
   "name": "hubsoft-mcp",
   "display_name": "Hubsoft (não oficial)",
-  "version": "0.3.0",
-  "description": "Consulte clientes, faturas, atendimentos e OS do ERP Hubsoft com as permissões do seu próprio usuário.",
+  "version": "0.4.0",
+  "description": "Consulte uma ou várias bases do ERP Hubsoft (clientes, bloqueados, faturas, RADIUS) com as permissões do seu próprio usuário.",
   "long_description": "Servidor MCP não oficial para o Hubsoft, ERP de provedores de internet. Cada pessoa usa o próprio login do Hubsoft; as credenciais ficam só no computador dela. Modo somente leitura por padrão.",
   "author": {
     "name": "Marcelo"
@@ -25,18 +25,39 @@
         "${__dirname}/server/hubsoft-mcp.mjs"
       ],
       "env": {
+        "HUBSOFT_NOME": "${user_config.nome}",
+        "HUBSOFT_DESCRICAO": "${user_config.descricao}",
         "HUBSOFT_URL": "${user_config.url}",
         "HUBSOFT_CLIENT_ID": "${user_config.client_id}",
         "HUBSOFT_CLIENT_SECRET": "${user_config.client_secret}",
         "HUBSOFT_USERNAME": "${user_config.username}",
         "HUBSOFT_PASSWORD": "${user_config.password}",
+        "HUBSOFT_2_NOME": "${user_config.nome_2}",
+        "HUBSOFT_2_DESCRICAO": "${user_config.descricao_2}",
+        "HUBSOFT_2_URL": "${user_config.url_2}",
+        "HUBSOFT_2_CLIENT_ID": "${user_config.client_id_2}",
+        "HUBSOFT_2_CLIENT_SECRET": "${user_config.client_secret_2}",
+        "HUBSOFT_2_USERNAME": "${user_config.username_2}",
+        "HUBSOFT_2_PASSWORD": "${user_config.password_2}",
+        "HUBSOFT_3_NOME": "${user_config.nome_3}",
+        "HUBSOFT_3_DESCRICAO": "${user_config.descricao_3}",
+        "HUBSOFT_3_URL": "${user_config.url_3}",
+        "HUBSOFT_3_CLIENT_ID": "${user_config.client_id_3}",
+        "HUBSOFT_3_CLIENT_SECRET": "${user_config.client_secret_3}",
+        "HUBSOFT_3_USERNAME": "${user_config.username_3}",
+        "HUBSOFT_3_PASSWORD": "${user_config.password_3}",
         "HUBSOFT_READ_ONLY": "${user_config.read_only}",
         "HUBSOFT_GRAPHQL_PATH": "${user_config.graphql_path}",
+        "HUBSOFT_CONFIG": "${user_config.arquivo_servidores}",
         "HUBSOFT_EXPOR_SENHAS": "${user_config.expor_senhas}"
       }
     }
   },
   "tools": [
+    {
+      "name": "hubsoft_servidores",
+      "description": "Lista as bases Hubsoft configuradas e testa o login em cada uma"
+    },
     {
       "name": "hubsoft_situacao_cliente",
       "description": "Visão 360° do cliente: cadastro, serviços, PPPoE, ONU, RADIUS e faturas em aberto"
@@ -87,37 +108,139 @@
     }
   ],
   "user_config": {
+    "nome": {
+      "type": "string",
+      "title": "Servidor 1: nome curto",
+      "description": "Apelido usado nas perguntas, ex.: base_pf. Deixe em branco se tiver uma só base",
+      "required": false
+    },
+    "descricao": {
+      "type": "string",
+      "title": "Servidor 1: descrição",
+      "description": "Ex.: Clientes pessoa física. O Claude usa isto para escolher a base",
+      "required": false
+    },
     "url": {
       "type": "string",
-      "title": "URL da API do Hubsoft",
+      "title": "Servidor 1: URL da API",
       "description": "Ex.: https://api.seuprovedor.hubsoft.com.br",
       "required": true
     },
     "client_id": {
       "type": "string",
-      "title": "Client ID",
+      "title": "Servidor 1: Client ID",
       "description": "Fornecido pelo administrador do provedor",
       "required": true
     },
     "client_secret": {
       "type": "string",
-      "title": "Client Secret",
+      "title": "Servidor 1: Client secret",
+      "description": "Fornecido pelo administrador do provedor",
       "sensitive": true,
-      "required": true,
-      "description": "Fornecido pelo administrador do provedor"
+      "required": true
     },
     "username": {
       "type": "string",
-      "title": "Seu usuário do Hubsoft",
-      "description": "Use o SEU login — o acesso segue as suas permissões",
+      "title": "Servidor 1: seu usuário de API",
+      "description": "Use o SEU login (sem 2FA): o acesso segue as suas permissões",
       "required": true
     },
     "password": {
       "type": "string",
-      "title": "Sua senha do Hubsoft",
+      "title": "Servidor 1: sua senha",
+      "description": "Guardada no armazenamento seguro do sistema",
       "sensitive": true,
-      "required": true,
-      "description": "Guardada no cofre do sistema operacional"
+      "required": true
+    },
+    "nome_2": {
+      "type": "string",
+      "title": "Servidor 2: nome curto (opcional)",
+      "description": "Apelido usado nas perguntas, ex.: base_pf",
+      "default": "",
+      "required": false
+    },
+    "descricao_2": {
+      "type": "string",
+      "title": "Servidor 2: descrição (opcional)",
+      "description": "Ex.: Clientes pessoa física. O Claude usa isto para escolher a base",
+      "required": false
+    },
+    "url_2": {
+      "type": "string",
+      "title": "Servidor 2: URL da API (opcional)",
+      "description": "Ex.: https://api.seuprovedor.hubsoft.com.br. Deixe em branco se não usar",
+      "required": false
+    },
+    "client_id_2": {
+      "type": "string",
+      "title": "Servidor 2: Client ID (opcional)",
+      "description": "Fornecido pelo administrador do provedor",
+      "required": false
+    },
+    "client_secret_2": {
+      "type": "string",
+      "title": "Servidor 2: Client secret (opcional)",
+      "description": "Fornecido pelo administrador do provedor",
+      "sensitive": true,
+      "required": false
+    },
+    "username_2": {
+      "type": "string",
+      "title": "Servidor 2: seu usuário de API (opcional)",
+      "description": "Use o SEU login (sem 2FA): o acesso segue as suas permissões",
+      "required": false
+    },
+    "password_2": {
+      "type": "string",
+      "title": "Servidor 2: sua senha (opcional)",
+      "description": "Guardada no armazenamento seguro do sistema",
+      "sensitive": true,
+      "required": false
+    },
+    "nome_3": {
+      "type": "string",
+      "title": "Servidor 3: nome curto (opcional)",
+      "description": "Apelido usado nas perguntas, ex.: base_pf",
+      "default": "",
+      "required": false
+    },
+    "descricao_3": {
+      "type": "string",
+      "title": "Servidor 3: descrição (opcional)",
+      "description": "Ex.: Clientes pessoa física. O Claude usa isto para escolher a base",
+      "required": false
+    },
+    "url_3": {
+      "type": "string",
+      "title": "Servidor 3: URL da API (opcional)",
+      "description": "Ex.: https://api.seuprovedor.hubsoft.com.br. Deixe em branco se não usar",
+      "required": false
+    },
+    "client_id_3": {
+      "type": "string",
+      "title": "Servidor 3: Client ID (opcional)",
+      "description": "Fornecido pelo administrador do provedor",
+      "required": false
+    },
+    "client_secret_3": {
+      "type": "string",
+      "title": "Servidor 3: Client secret (opcional)",
+      "description": "Fornecido pelo administrador do provedor",
+      "sensitive": true,
+      "required": false
+    },
+    "username_3": {
+      "type": "string",
+      "title": "Servidor 3: seu usuário de API (opcional)",
+      "description": "Use o SEU login (sem 2FA): o acesso segue as suas permissões",
+      "required": false
+    },
+    "password_3": {
+      "type": "string",
+      "title": "Servidor 3: sua senha (opcional)",
+      "description": "Guardada no armazenamento seguro do sistema",
+      "sensitive": true,
+      "required": false
     },
     "read_only": {
       "type": "boolean",
@@ -128,9 +251,15 @@
     },
     "graphql_path": {
       "type": "string",
-      "title": "Caminho GraphQL (opcional)",
-      "description": "Padrão do Hubsoft: /graphql/v1. Use \"off\" para desativar.",
+      "title": "Caminho GraphQL",
+      "description": "Padrão do Hubsoft: /graphql/v1. Use off para desativar",
       "default": "/graphql/v1",
+      "required": false
+    },
+    "arquivo_servidores": {
+      "type": "file",
+      "title": "Arquivo com mais servidores (opcional)",
+      "description": "Mais de 3 bases? Caminho de um servidores.json (veja o README)",
       "required": false
     },
     "expor_senhas": {

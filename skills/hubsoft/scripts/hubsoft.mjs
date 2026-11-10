@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// hubsoft-mcp 0.3.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
+// hubsoft-mcp 0.4.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
 // Arquivo gerado por scripts/bundle.mjs a partir de src/. Não edite.
 import { createRequire as __cr } from "node:module"; const require = __cr(import.meta.url);
 var __defProp = Object.defineProperty;
@@ -9,8 +9,8 @@ var __export = (target, all) => {
 };
 
 // src/cli.ts
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { homedir as homedir2 } from "node:os";
+import { join as join2 } from "node:path";
 
 // node_modules/zod/v4/classic/external.js
 var external_exports = {};
@@ -1870,18 +1870,18 @@ var validateAsync = async (schema, value, _ctx) => {
   return result.issues.length === 0;
 };
 var _encode = (_Err) => {
-  const parse3 = _parse(_Err);
+  const parse4 = _parse(_Err);
   const fn = (schema, value, _ctx, _params) => {
     const ctx = _ctx ? { ..._ctx, direction: "backward" } : { direction: "backward" };
-    return parse3(schema, value, ctx, finalizeParams(fn, _params));
+    return parse4(schema, value, ctx, finalizeParams(fn, _params));
   };
   return fn;
 };
 var encode = /* @__PURE__ */ _encode($ZodRealError);
 var _decode = (_Err) => {
-  const parse3 = _parse(_Err);
+  const parse4 = _parse(_Err);
   const fn = (schema, value, _ctx, _params) => {
-    return parse3(schema, value, _ctx, finalizeParams(fn, _params));
+    return parse4(schema, value, _ctx, finalizeParams(fn, _params));
   };
   return fn;
 };
@@ -3376,7 +3376,7 @@ function capSize(inst, size) {
   if (!caps.length)
     return;
   const cap = Math.min(...caps.map((c) => c[0]));
-  const parse3 = inst._zod.parse;
+  const parse4 = inst._zod.parse;
   inst._zod.parse = (payload, ctx) => {
     const n = size(payload.value);
     if (n > cap && !ctx?.skipChecks && ctx?.direction !== "backward") {
@@ -3390,7 +3390,7 @@ function capSize(inst, size) {
         }
       }
     }
-    return parse3(payload, ctx);
+    return parse4(payload, ctx);
   };
 }
 var arraySize = (input2) => Array.isArray(input2) ? input2.length : -1;
@@ -15863,7 +15863,7 @@ function foldObjects(members2) {
     objects.push(member);
   }
   const properties = {};
-  const required3 = /* @__PURE__ */ new Set();
+  const required2 = /* @__PURE__ */ new Set();
   for (const object2 of objects) {
     for (const key in object2.properties) {
       if (Object.prototype.hasOwnProperty.call(properties, key))
@@ -15880,11 +15880,11 @@ function foldObjects(members2) {
       assignProp(properties, key, merged);
     }
     for (const key of object2.required ?? [])
-      required3.add(key);
+      required2.add(key);
   }
   const folded = { type: "object", properties };
-  if (required3.size)
-    folded.required = [...required3];
+  if (required2.size)
+    folded.required = [...required2];
   if (objects.every((object2) => object2.additionalProperties === false)) {
     folded.additionalProperties = false;
   } else {
@@ -19730,19 +19730,14 @@ function date4(params) {
 }
 
 // src/config.ts
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+var MAX_SLOTS = 9;
+var ARQUIVO_PADRAO = join(homedir(), ".config", "hubsoft", "servidores.json");
 function env(name) {
   const v = process.env[name]?.trim();
   if (!v || /^\$\{[^}]+\}$/.test(v)) return void 0;
-  return v;
-}
-function required2(name) {
-  const v = env(name);
-  if (!v) {
-    throw new Error(
-      `Vari\xE1vel de ambiente obrigat\xF3ria ausente: ${name}. Veja o README para configurar o hubsoft-mcp.`
-    );
-  }
   return v;
 }
 function bool(name, def) {
@@ -19750,23 +19745,107 @@ function bool(name, def) {
   if (v === void 0) return def;
   return ["1", "true", "sim", "yes", "on"].includes(v);
 }
-function loadConfig() {
+function graphqlPath(v) {
+  const s = (v ?? "").trim();
+  if (s.toLowerCase() === "off") return "";
+  return s || "/graphql/v1";
+}
+function normalizarNome(s) {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim().replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "");
+}
+function expandEnv(v) {
+  if (typeof v !== "string") return v === void 0 || v === null ? void 0 : String(v);
+  return v.replace(/\{env:([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, n) => process.env[n] ?? "").trim() || void 0;
+}
+function globais() {
   return {
-    baseUrl: required2("HUBSOFT_URL").replace(/\/+$/, ""),
-    clientId: required2("HUBSOFT_CLIENT_ID"),
-    clientSecret: required2("HUBSOFT_CLIENT_SECRET"),
-    username: required2("HUBSOFT_USERNAME"),
-    password: required2("HUBSOFT_PASSWORD"),
     readOnly: bool("HUBSOFT_READ_ONLY", true),
-    // Padrão do Hubsoft: /graphql/v1. Use "off" para desativar.
-    graphqlPath: (() => {
-      const v = env("HUBSOFT_GRAPHQL_PATH") ?? "";
-      if (v.toLowerCase() === "off") return "";
-      return v || "/graphql/v1";
-    })(),
     maxResponseChars: Number(env("HUBSOFT_MAX_RESPONSE_CHARS") ?? 6e4),
     exposeSecrets: bool("HUBSOFT_EXPOR_SENHAS", false)
   };
+}
+function lerArquivo(caminho) {
+  let json2;
+  try {
+    json2 = JSON.parse(readFileSync(caminho, "utf8"));
+  } catch (e) {
+    throw new Error(`N\xE3o foi poss\xEDvel ler ${caminho}: ${e.message}`);
+  }
+  const lista = Array.isArray(json2) ? json2 : json2?.servidores;
+  if (!Array.isArray(lista)) {
+    throw new Error(`${caminho}: esperado {"servidores": [ ... ]}`);
+  }
+  return lista.map((s, i) => ({
+    origem: `${caminho} (item ${i + 1})`,
+    nome: expandEnv(s.nome),
+    descricao: expandEnv(s.descricao),
+    url: expandEnv(s.url),
+    client_id: expandEnv(s.client_id),
+    client_secret: expandEnv(s.client_secret),
+    usuario: expandEnv(s.usuario ?? s.username),
+    senha: expandEnv(s.senha ?? s.password),
+    graphql_path: expandEnv(s.graphql_path)
+  }));
+}
+function lerSlot(prefixo, origem) {
+  const url2 = env(`${prefixo}URL`);
+  if (!url2) return void 0;
+  return {
+    origem,
+    nome: env(`${prefixo}NOME`),
+    descricao: env(`${prefixo}DESCRICAO`),
+    url: url2,
+    client_id: env(`${prefixo}CLIENT_ID`),
+    client_secret: env(`${prefixo}CLIENT_SECRET`),
+    usuario: env(`${prefixo}USERNAME`),
+    senha: env(`${prefixo}PASSWORD`),
+    graphql_path: env(`${prefixo}GRAPHQL_PATH`)
+  };
+}
+function loadServers() {
+  const brutos = [];
+  const s0 = lerSlot("HUBSOFT_", "vari\xE1veis HUBSOFT_*");
+  if (s0) brutos.push(s0);
+  for (let i = 1; i <= MAX_SLOTS; i++) {
+    const s = lerSlot(`HUBSOFT_${i}_`, `vari\xE1veis HUBSOFT_${i}_*`);
+    if (s) brutos.push(s);
+  }
+  const arquivo = env("HUBSOFT_CONFIG") ?? (existsSync(ARQUIVO_PADRAO) ? ARQUIVO_PADRAO : void 0);
+  if (arquivo) brutos.push(...lerArquivo(arquivo));
+  if (!brutos.length) {
+    throw new Error(
+      `Nenhum servidor Hubsoft configurado. Defina HUBSOFT_URL, HUBSOFT_CLIENT_ID, HUBSOFT_CLIENT_SECRET, HUBSOFT_USERNAME e HUBSOFT_PASSWORD, ou crie ${ARQUIVO_PADRAO}. Veja o README.`
+    );
+  }
+  const g = globais();
+  const vistos = /* @__PURE__ */ new Set();
+  return brutos.map((b, i) => {
+    const faltando = [
+      ["url", b.url],
+      ["client_id", b.client_id],
+      ["client_secret", b.client_secret],
+      ["usu\xE1rio", b.usuario],
+      ["senha", b.senha]
+    ].filter(([, v]) => !v).map(([k]) => k);
+    if (faltando.length) {
+      throw new Error(`Servidor em ${b.origem}: faltando ${faltando.join(", ")}.`);
+    }
+    let nome = normalizarNome(b.nome ?? "") || (i === 0 ? "principal" : `servidor_${i + 1}`);
+    if (["todos", "all"].includes(nome)) throw new Error(`Nome de servidor reservado: "${nome}".`);
+    if (vistos.has(nome)) throw new Error(`Nome de servidor repetido: "${nome}" (${b.origem}).`);
+    vistos.add(nome);
+    return {
+      nome,
+      descricao: b.descricao,
+      baseUrl: b.url.replace(/\/+$/, ""),
+      clientId: b.client_id,
+      clientSecret: b.client_secret,
+      username: b.usuario,
+      password: b.senha,
+      graphqlPath: graphqlPath(b.graphql_path ?? env("HUBSOFT_GRAPHQL_PATH")),
+      ...g
+    };
+  });
 }
 function loadEnvFiles(files) {
   const loaded = [];
@@ -20039,7 +20118,7 @@ function masked(d) {
   return d;
 }
 function registerSituacao(server, hs) {
-  const { graphqlPath, maxResponseChars: max } = hs.config;
+  const { graphqlPath: graphqlPath2, maxResponseChars: max } = hs.config;
   server.registerTool(
     "hubsoft_situacao_cliente",
     {
@@ -20057,14 +20136,14 @@ function registerSituacao(server, hs) {
         throw new Error("Informe cpf_cnpj ou codigo_cliente.");
       }
       let cliente = null;
-      if (graphqlPath) {
+      if (graphqlPath2) {
         if (codigo_cliente) {
-          const r = await hs.post(graphqlPath, { query: Q_COD, variables: { v: codigo_cliente } });
+          const r = await hs.post(graphqlPath2, { query: Q_COD, variables: { v: codigo_cliente } });
           cliente = r?.data?.cliente ?? null;
         } else {
           const d = digits(cpf_cnpj);
           for (const v of [d, masked(d)]) {
-            const r = await hs.post(graphqlPath, { query: Q_CPF, variables: { v } });
+            const r = await hs.post(graphqlPath2, { query: Q_CPF, variables: { v } });
             cliente = r?.data?.cliente ?? null;
             if (cliente) break;
           }
@@ -20078,7 +20157,7 @@ function registerSituacao(server, hs) {
         cliente = r?.clientes?.[0] ?? null;
       }
       if (!cliente) return { encontrado: false, mensagem: "Cliente n\xE3o encontrado." };
-      if (graphqlPath && !incluir_cancelados && Array.isArray(cliente.servicos)) {
+      if (graphqlPath2 && !incluir_cancelados && Array.isArray(cliente.servicos)) {
         const total = cliente.servicos.length;
         cliente.servicos = cliente.servicos.filter((s) => !s.data_cancelamento);
         const ocultos = total - cliente.servicos.length;
@@ -20400,8 +20479,8 @@ function isMutation(query) {
   return /\bmutation\b/i.test(clean) || /\bsubscription\b/i.test(clean);
 }
 function registerGraphql(server, hs) {
-  const { graphqlPath, readOnly, maxResponseChars: max } = hs.config;
-  if (!graphqlPath) return;
+  const { graphqlPath: graphqlPath2, readOnly, maxResponseChars: max } = hs.config;
+  if (!graphqlPath2) return;
   server.registerTool(
     "hubsoft_graphql_consultas",
     {
@@ -20411,7 +20490,7 @@ function registerGraphql(server, hs) {
       annotations: { readOnlyHint: true, openWorldHint: true }
     },
     async () => run(max, async () => {
-      const r = await hs.post(graphqlPath, { query: ROOT_FIELDS });
+      const r = await hs.post(graphqlPath2, { query: ROOT_FIELDS });
       const s = r?.data?.__schema;
       if (!s) return r;
       return {
@@ -20431,7 +20510,7 @@ function registerGraphql(server, hs) {
       annotations: { readOnlyHint: true, openWorldHint: true }
     },
     async ({ nome }) => run(max, async () => {
-      const r = await hs.post(graphqlPath, { query: TYPE_FIELDS, variables: { nome } });
+      const r = await hs.post(graphqlPath2, { query: TYPE_FIELDS, variables: { nome } });
       const t = r?.data?.__type;
       if (!t) return r?.errors ? r : { erro: `Tipo "${nome}" n\xE3o encontrado.` };
       return {
@@ -20461,7 +20540,7 @@ function registerGraphql(server, hs) {
           "Mutations est\xE3o bloqueadas (HUBSOFT_READ_ONLY=true). S\xF3 consultas s\xE3o permitidas."
         );
       }
-      return hs.post(graphqlPath, { query, variables });
+      return hs.post(graphqlPath2, { query, variables });
     })
   );
 }
@@ -20482,8 +20561,155 @@ function collectTools(hs) {
   return defs;
 }
 
+// src/multi.ts
+var TODOS = /* @__PURE__ */ new Set(["", "todos", "todas", "all", "*"]);
+function exigeUmServidor(t) {
+  return t.config.annotations?.readOnlyHint === false && t.name !== "hubsoft_graphql";
+}
+function rotulo(s) {
+  return s.descricao ? `${s.nome} (${s.descricao})` : s.nome;
+}
+function descreverServidores(servers) {
+  return servers.map(rotulo).join("; ");
+}
+function resolverServidores(servers, pedido) {
+  const termos = (pedido ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (!termos.length || termos.some((t) => TODOS.has(t.toLowerCase()))) return servers;
+  const out2 = [];
+  for (const termo2 of termos) {
+    const n = normalizarNome(termo2);
+    let achou = servers.filter((s) => s.nome === n);
+    if (!achou.length) {
+      achou = servers.filter((s) => s.descricao && normalizarNome(s.descricao).includes(n));
+    }
+    if (achou.length !== 1) {
+      throw new Error(
+        `Servidor "${termo2}" ${achou.length ? "\xE9 amb\xEDguo" : "n\xE3o encontrado"}. Dispon\xEDveis: ${descreverServidores(servers)}.`
+      );
+    }
+    if (!out2.includes(achou[0])) out2.push(achou[0]);
+  }
+  return out2;
+}
+function parse3(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+function collectMultiTools(servers) {
+  const max = servers[0].maxResponseChars;
+  const clientes = new Map(servers.map((s) => [s.nome, new HubsoftClient(s)]));
+  const toolServidores = {
+    name: "hubsoft_servidores",
+    config: {
+      title: "Servidores (bases) Hubsoft configurados",
+      description: "Lista as bases Hubsoft configuradas (nome, descri\xE7\xE3o, endere\xE7o, GraphQL). Com testar=true, verifica o login em cada uma. Use para saber em qual base procurar ou para diagnosticar falhas de acesso.",
+      inputSchema: {
+        testar: external_exports.boolean().optional().describe("Testa a autentica\xE7\xE3o em cada servidor.")
+      },
+      annotations: { readOnlyHint: true, openWorldHint: true }
+    },
+    cb: async ({ testar }) => run(
+      max,
+      async () => Promise.all(
+        servers.map(async (s) => {
+          const info = {
+            nome: s.nome,
+            descricao: s.descricao,
+            endereco: new URL(s.baseUrl).host,
+            usuario: s.username,
+            graphql: s.graphqlPath || "desativado"
+          };
+          if (testar) {
+            try {
+              const { res, body } = await clientes.get(s.nome).requestToken("json");
+              info.login = res.ok && body?.access_token ? "ok" : `falhou (HTTP ${res.status}: ${body?.msg ?? body?.error ?? ""})`;
+            } catch (e) {
+              info.login = `falhou (${e.message})`;
+            }
+          }
+          return info;
+        })
+      )
+    )
+  };
+  if (servers.length === 1) {
+    return [toolServidores, ...collectTools(clientes.get(servers[0].nome))];
+  }
+  const porServidor = new Map(
+    servers.map((s) => [
+      s.nome,
+      collectTools(new HubsoftClient({ ...s, maxResponseChars: Number.MAX_SAFE_INTEGER }))
+    ])
+  );
+  const nomes = [];
+  for (const defs of porServidor.values()) for (const d of defs) if (!nomes.includes(d.name)) nomes.push(d.name);
+  const lista = descreverServidores(servers);
+  const combinadas = nomes.map((name) => {
+    const base = [...porServidor.values()].flat().find((d) => d.name === name);
+    const umSo = exigeUmServidor(base);
+    const servidorParam = external_exports.string().optional().describe(
+      umSo ? `Obrigat\xF3rio: a base onde executar (${lista}).` : `Base(s) a consultar: nome, lista separada por v\xEDrgula ou "todos" (padr\xE3o). Bases: ${lista}.`
+    );
+    return {
+      name,
+      config: {
+        ...base.config,
+        description: `${base.config.description ?? ""} ` + (umSo ? "Exige o par\xE2metro servidor (uma \xFAnica base)." : "Sem o par\xE2metro servidor, consulta todas as bases e agrupa o resultado por base."),
+        inputSchema: { servidor: servidorParam, ...base.config.inputSchema ?? {} }
+      },
+      cb: async (args) => {
+        try {
+          const { servidor, ...resto } = args ?? {};
+          const alvos = resolverServidores(servers, servidor);
+          if (umSo && alvos.length !== 1) {
+            throw new Error(`Esta a\xE7\xE3o altera dados: informe uma \xFAnica base no par\xE2metro servidor (${lista}).`);
+          }
+          const resultados = await Promise.all(
+            alvos.map(async (s) => {
+              const def = porServidor.get(s.nome).find((d) => d.name === name);
+              if (!def) return { s, erro: "ferramenta indispon\xEDvel nesta base (GraphQL desativado?)" };
+              const r = await def.cb(resto);
+              const text = r.content.map((c) => c.text).join("\n");
+              return r.isError ? { s, erro: text } : { s, dado: parse3(text) };
+            })
+          );
+          if (alvos.length === 1) {
+            const [r] = resultados;
+            if ("erro" in r) throw new Error(`[${r.s.nome}] ${r.erro}`);
+            const d = r.dado;
+            return ok(d && typeof d === "object" && !Array.isArray(d) ? { servidor: r.s.nome, ...d } : { servidor: r.s.nome, resultado: d }, max);
+          }
+          const saida = {
+            servidores_consultados: alvos.map((s) => s.nome),
+            resultados: {}
+          };
+          const naoEncontrado = [];
+          const erros = {};
+          for (const r of resultados) {
+            if ("erro" in r) erros[r.s.nome] = r.erro;
+            else if (r.dado?.encontrado === false) naoEncontrado.push(r.s.nome);
+            else saida.resultados[r.s.nome] = r.dado;
+          }
+          if (naoEncontrado.length) saida.nao_encontrado_em = naoEncontrado;
+          if (Object.keys(erros).length) saida.erros = erros;
+          if (!Object.keys(saida.resultados).length && !naoEncontrado.length) {
+            throw new Error(`Falhou em todas as bases: ${JSON.stringify(erros)}`);
+          }
+          return ok(saida, max);
+        } catch (e) {
+          return fail(e);
+        }
+      }
+    };
+  });
+  return [toolServidores, ...combinadas];
+}
+
 // src/version.ts
-var VERSION = "0.3.0";
+var VERSION = "0.4.0";
 
 // src/cli.ts
 var out = (s) => process.stdout.write(s + "\n");
@@ -20558,6 +20784,8 @@ function helpGeral(tools) {
   out("\nOp\xE7\xF5es globais: --env-file <arquivo>  --version");
   out("Credenciais: HUBSOFT_URL, HUBSOFT_CLIENT_ID, HUBSOFT_CLIENT_SECRET, HUBSOFT_USERNAME,");
   out("HUBSOFT_PASSWORD (ambiente, ./.env ou ~/.config/hubsoft/.env).");
+  out("V\xE1rias bases: HUBSOFT_NOME/HUBSOFT_DESCRICAO + HUBSOFT_2_URL, HUBSOFT_2_NOME\u2026 ou");
+  out("~/.config/hubsoft/servidores.json. Escolha a base com --servidor <nome> (padr\xE3o: todas).");
 }
 function helpFerramenta(t) {
   out(`hubsoft ${shortName(t)} \u2014 ${t.config.title ?? ""}
@@ -20577,7 +20805,12 @@ function helpFerramenta(t) {
   }
 }
 function toolsSemCredenciais() {
+  try {
+    return collectMultiTools(loadServers());
+  } catch {
+  }
   const fake = new HubsoftClient({
+    nome: "principal",
     baseUrl: "http://localhost",
     clientId: "",
     clientSecret: "",
@@ -20598,7 +20831,7 @@ async function main() {
     argv = argv.filter((_, i) => i !== envIdx && i !== envIdx + 1);
     if (!loadEnvFiles([file2]).length) throw new Error(`N\xE3o foi poss\xEDvel ler ${file2}`);
   } else {
-    loadEnvFiles([join(process.cwd(), ".env"), join(homedir(), ".config", "hubsoft", ".env")]);
+    loadEnvFiles([join2(process.cwd(), ".env"), join2(homedir2(), ".config", "hubsoft", ".env")]);
   }
   const [cmd, ...rest] = argv;
   if (cmd === "--version" || cmd === "-v") return out(VERSION);
@@ -20612,9 +20845,9 @@ async function main() {
     if (!t2) throw new Error(`Ferramenta desconhecida: ${cmd}. Veja: hubsoft ferramentas`);
     return helpFerramenta(t2);
   }
-  const cfg = loadConfig();
-  setExposeSecrets(cfg.exposeSecrets);
-  const tools = collectTools(new HubsoftClient(cfg));
+  const servers = loadServers();
+  setExposeSecrets(servers[0].exposeSecrets);
+  const tools = collectMultiTools(servers);
   const t = find(tools);
   if (!t) {
     const off = find(toolsSemCredenciais()) ? "" : " Veja: hubsoft ferramentas";

@@ -33,3 +33,33 @@ HUBSOFT_PASSWORD=...
 ```
 
 Teste com `node scripts/hubsoft.mjs consulta --rota configuracao/servico_status`.
+
+## Várias bases (servidores)
+
+Cada base tem um **nome** curto (usado no parâmetro `servidor`) e uma **descrição** (o agente usa para escolher a base certa).
+
+**Por variáveis** (até 9 bases):
+
+```
+HUBSOFT_NOME=base_pf
+HUBSOFT_DESCRICAO=Clientes pessoa física
+HUBSOFT_URL=...            # + CLIENT_ID, CLIENT_SECRET, USERNAME, PASSWORD
+HUBSOFT_2_NOME=base_pj
+HUBSOFT_2_DESCRICAO=Clientes pessoa jurídica
+HUBSOFT_2_URL=...          # + HUBSOFT_2_CLIENT_ID, HUBSOFT_2_CLIENT_SECRET, …
+```
+
+**Por arquivo** (`~/.config/hubsoft/servidores.json`, ou o caminho em `HUBSOFT_CONFIG`), sem limite de bases:
+
+```json
+{
+  "servidores": [
+    { "nome": "base_pf", "descricao": "Clientes pessoa física", "url": "https://api.pf.exemplo.com.br",
+      "client_id": "1", "client_secret": "{env:HS_PF_SECRET}", "usuario": "voce.api@exemplo.com.br", "senha": "{env:HS_PF_SENHA}" },
+    { "nome": "base_vtal", "descricao": "Clientes da rede neutra V.tal", "url": "https://api.vtal.exemplo.com.br",
+      "client_id": "2", "client_secret": "...", "usuario": "voce.api@exemplo.com.br", "senha": "..." }
+  ]
+}
+```
+
+`{env:VAR}` lê o valor de uma variável de ambiente, para não gravar segredos no arquivo. Se gravar, use `chmod 600`.

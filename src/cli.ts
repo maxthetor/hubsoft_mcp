@@ -14,9 +14,10 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
-import { loadConfig, loadEnvFiles } from "./config.js";
+import { loadServers, loadEnvFiles } from "./config.js";
 import { HubsoftClient } from "./client.js";
 import { collectTools, type ToolDef } from "./registry.js";
+import { collectMultiTools } from "./multi.js";
 import { setExposeSecrets } from "./util.js";
 import { VERSION } from "./version.js";
 
@@ -98,6 +99,8 @@ function helpGeral(tools: ToolDef[]) {
   out("\nOpções globais: --env-file <arquivo>  --version");
   out("Credenciais: HUBSOFT_URL, HUBSOFT_CLIENT_ID, HUBSOFT_CLIENT_SECRET, HUBSOFT_USERNAME,");
   out("HUBSOFT_PASSWORD (ambiente, ./.env ou ~/.config/hubsoft/.env).");
+  out("Várias bases: HUBSOFT_NOME/HUBSOFT_DESCRICAO + HUBSOFT_2_URL, HUBSOFT_2_NOME… ou");
+  out("~/.config/hubsoft/servidores.json. Escolha a base com --servidor <nome> (padrão: todas).");
 }
 
 function helpFerramenta(t: ToolDef) {
@@ -116,9 +119,15 @@ function helpFerramenta(t: ToolDef) {
   }
 }
 
-// Lista de ferramentas sem precisar de credenciais (para --help).
+// Lista de ferramentas sem precisar de credenciais válidas (para --help).
 function toolsSemCredenciais(): ToolDef[] {
+  try {
+    return collectMultiTools(loadServers());
+  } catch {
+    /* sem configuração: mostra as ferramentas de um servidor genérico */
+  }
   const fake = new HubsoftClient({
+    nome: "principal",
     baseUrl: "http://localhost",
     clientId: "",
     clientSecret: "",
@@ -159,9 +168,9 @@ async function main() {
     return helpFerramenta(t);
   }
 
-  const cfg = loadConfig();
-  setExposeSecrets(cfg.exposeSecrets);
-  const tools = collectTools(new HubsoftClient(cfg));
+  const servers = loadServers();
+  setExposeSecrets(servers[0].exposeSecrets);
+  const tools = collectMultiTools(servers);
   const t = find(tools);
   if (!t) {
     const off = find(toolsSemCredenciais()) ? "" : " Veja: hubsoft ferramentas";

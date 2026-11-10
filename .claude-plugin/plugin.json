@@ -1,8 +1,8 @@
 {
   "name": "hubsoft",
   "displayName": "Hubsoft (não oficial)",
-  "version": "0.3.0",
-  "description": "Consulte o ERP Hubsoft de provedores de internet com as permissões do seu próprio usuário: clientes, serviços bloqueados, PPPoE, ONU, RADIUS, faturas, atendimentos e OS.",
+  "version": "0.4.0",
+  "description": "Consulte uma ou várias bases do ERP Hubsoft com as permissões do seu próprio usuário: clientes, bloqueados, PPPoE, ONU, RADIUS, faturas, atendimentos e OS.",
   "author": {
     "name": "Marcelo",
     "url": "https://github.com/maxthetor"
@@ -22,36 +22,138 @@
   "supportUrl": "https://github.com/maxthetor/hubsoft_mcp/issues",
   "privacyPolicyUrl": "https://github.com/maxthetor/hubsoft_mcp/blob/main/PRIVACY.md",
   "userConfig": {
+    "nome": {
+      "type": "string",
+      "title": "Servidor 1: nome curto",
+      "description": "Apelido usado nas perguntas, ex.: base_pf. Deixe em branco se tiver uma só base",
+      "required": false
+    },
+    "descricao": {
+      "type": "string",
+      "title": "Servidor 1: descrição",
+      "description": "Ex.: Clientes pessoa física. O Claude usa isto para escolher a base",
+      "required": false
+    },
     "url": {
       "type": "string",
-      "title": "URL da API do Hubsoft",
+      "title": "Servidor 1: URL da API",
       "description": "Ex.: https://api.seuprovedor.hubsoft.com.br",
       "required": true
     },
     "client_id": {
       "type": "string",
-      "title": "Client ID",
+      "title": "Servidor 1: Client ID",
       "description": "Fornecido pelo administrador do provedor",
       "required": true
     },
     "client_secret": {
       "type": "string",
-      "title": "Client secret",
+      "title": "Servidor 1: Client secret",
       "description": "Fornecido pelo administrador do provedor",
       "required": true,
       "sensitive": true
     },
     "username": {
       "type": "string",
-      "title": "Seu usuário de API do Hubsoft",
+      "title": "Servidor 1: seu usuário de API",
       "description": "Use o SEU login (sem 2FA): o acesso segue as suas permissões",
       "required": true
     },
     "password": {
       "type": "string",
-      "title": "Sua senha do Hubsoft",
+      "title": "Servidor 1: sua senha",
       "description": "Guardada no armazenamento seguro do sistema",
       "required": true,
+      "sensitive": true
+    },
+    "nome_2": {
+      "type": "string",
+      "title": "Servidor 2: nome curto (opcional)",
+      "description": "Apelido usado nas perguntas, ex.: base_pf",
+      "required": false,
+      "default": ""
+    },
+    "descricao_2": {
+      "type": "string",
+      "title": "Servidor 2: descrição (opcional)",
+      "description": "Ex.: Clientes pessoa física. O Claude usa isto para escolher a base",
+      "required": false
+    },
+    "url_2": {
+      "type": "string",
+      "title": "Servidor 2: URL da API (opcional)",
+      "description": "Ex.: https://api.seuprovedor.hubsoft.com.br. Deixe em branco se não usar",
+      "required": false
+    },
+    "client_id_2": {
+      "type": "string",
+      "title": "Servidor 2: Client ID (opcional)",
+      "description": "Fornecido pelo administrador do provedor",
+      "required": false
+    },
+    "client_secret_2": {
+      "type": "string",
+      "title": "Servidor 2: Client secret (opcional)",
+      "description": "Fornecido pelo administrador do provedor",
+      "required": false,
+      "sensitive": true
+    },
+    "username_2": {
+      "type": "string",
+      "title": "Servidor 2: seu usuário de API (opcional)",
+      "description": "Use o SEU login (sem 2FA): o acesso segue as suas permissões",
+      "required": false
+    },
+    "password_2": {
+      "type": "string",
+      "title": "Servidor 2: sua senha (opcional)",
+      "description": "Guardada no armazenamento seguro do sistema",
+      "required": false,
+      "sensitive": true
+    },
+    "nome_3": {
+      "type": "string",
+      "title": "Servidor 3: nome curto (opcional)",
+      "description": "Apelido usado nas perguntas, ex.: base_pf",
+      "required": false,
+      "default": ""
+    },
+    "descricao_3": {
+      "type": "string",
+      "title": "Servidor 3: descrição (opcional)",
+      "description": "Ex.: Clientes pessoa física. O Claude usa isto para escolher a base",
+      "required": false
+    },
+    "url_3": {
+      "type": "string",
+      "title": "Servidor 3: URL da API (opcional)",
+      "description": "Ex.: https://api.seuprovedor.hubsoft.com.br. Deixe em branco se não usar",
+      "required": false
+    },
+    "client_id_3": {
+      "type": "string",
+      "title": "Servidor 3: Client ID (opcional)",
+      "description": "Fornecido pelo administrador do provedor",
+      "required": false
+    },
+    "client_secret_3": {
+      "type": "string",
+      "title": "Servidor 3: Client secret (opcional)",
+      "description": "Fornecido pelo administrador do provedor",
+      "required": false,
+      "sensitive": true
+    },
+    "username_3": {
+      "type": "string",
+      "title": "Servidor 3: seu usuário de API (opcional)",
+      "description": "Use o SEU login (sem 2FA): o acesso segue as suas permissões",
+      "required": false
+    },
+    "password_3": {
+      "type": "string",
+      "title": "Servidor 3: sua senha (opcional)",
+      "description": "Guardada no armazenamento seguro do sistema",
+      "required": false,
       "sensitive": true
     },
     "read_only": {
@@ -65,6 +167,12 @@
       "title": "Caminho GraphQL",
       "description": "Padrão do Hubsoft: /graphql/v1. Use off para desativar",
       "default": "/graphql/v1"
+    },
+    "arquivo_servidores": {
+      "type": "string",
+      "title": "Arquivo com mais servidores (opcional)",
+      "description": "Mais de 3 bases? Caminho de um servidores.json (veja o README)",
+      "required": false
     }
   },
   "icon": "./.claude-plugin/icon.png"

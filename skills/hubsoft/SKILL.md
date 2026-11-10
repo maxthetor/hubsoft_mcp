@@ -23,9 +23,21 @@ Escolha o primeiro modo disponível:
    node scripts/hubsoft.mjs situacao_cliente --cpf_cnpj 12345678900
    node scripts/hubsoft.mjs servicos_por_status --status suspenso_debito --incluir_faturas_vencidas
    node scripts/hubsoft.mjs graphql --query '{ pops(first: 10) { data { id_pop } } }'
+   node scripts/hubsoft.mjs situacao_cliente --cpf_cnpj 12345678900 --servidor base_pf
    ```
    A saída é JSON no stdout. Erros vão para o stderr, com código de saída 1.
    As credenciais vêm de variáveis `HUBSOFT_*`, de `./.env`, de `~/.config/hubsoft/.env` ou de `--env-file`. Se faltarem, peça ao usuário que configure (veja [referências/configuracao.md](references/configuracao.md)). **Nunca** peça a senha no chat nem a escreva em comandos.
+
+## Várias bases (servidores)
+
+Alguns provedores têm mais de uma base Hubsoft (ex.: `base_pf`, `base_pj`, `base_vtal`). Com 2 ou mais configuradas:
+
+- `servidores` lista as bases, com nome e descrição. Use `testar=true` para checar o login em cada uma.
+- Toda ferramenta aceita `servidor`: um nome, uma lista separada por vírgula ou `todos`.
+- **Sem `servidor`**, a consulta roda em **todas** as bases e o resultado vem agrupado em `resultados.<base>`, com `nao_encontrado_em` e `erros` por base.
+- Quando o usuário citar uma base ("na base pessoa física", "na PJ"), escolha pelo **nome ou pela descrição** e passe só ela.
+- Ações que alteram dados exigem **uma** base: use a base onde o cliente foi encontrado, porque IDs e códigos não valem entre bases.
+- Ao responder com dados de várias bases, diga de qual base veio cada cliente.
 
 ## Qual ferramenta usar
 

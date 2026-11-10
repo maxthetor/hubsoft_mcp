@@ -1,8 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { loadConfig } from "./config.js";
-import { HubsoftClient } from "./client.js";
-import { collectTools } from "./registry.js";
+import { loadServers } from "./config.js";
+import { collectMultiTools, instrucoesServidores } from "./multi.js";
 import { setExposeSecrets } from "./util.js";
 import { VERSION } from "./version.js";
 
@@ -21,22 +20,22 @@ export const INSTRUCTIONS =
   "Antes de qualquer ação que altere dados, confirme cliente e serviço com o usuário.";
 
 async function main() {
-  const cfg = loadConfig();
-  const hs = new HubsoftClient(cfg);
+  const servers = loadServers();
+  const cfg = servers[0];
   setExposeSecrets(cfg.exposeSecrets);
 
   const server = new McpServer(
     { name: "hubsoft-mcp", version: VERSION },
-    { instructions: INSTRUCTIONS },
+    { instructions: INSTRUCTIONS + instrucoesServidores(servers) },
   );
-  for (const t of collectTools(hs)) server.registerTool(t.name, t.config as any, t.cb as any);
+  for (const t of collectMultiTools(servers)) server.registerTool(t.name, t.config as any, t.cb as any);
 
   await server.connect(new StdioServerTransport());
   // stdout é do protocolo MCP; logs vão para stderr
   console.error(
-    `hubsoft-mcp ${VERSION} conectado a ${cfg.baseUrl} ` +
-      `(usuário ${cfg.username}, ${cfg.readOnly ? "somente leitura" : "leitura e escrita"}` +
-      `${cfg.graphqlPath ? `, GraphQL em ${cfg.graphqlPath}` : ""})`,
+    `hubsoft-mcp ${VERSION}: ${servers.length} servidor(es) — ` +
+      servers.map((s) => `${s.nome}=${new URL(s.baseUrl).host}`).join(", ") +
+      ` (${cfg.readOnly ? "somente leitura" : "leitura e escrita"})`,
   );
 }
 

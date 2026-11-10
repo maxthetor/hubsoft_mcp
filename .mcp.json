@@ -2,15 +2,34 @@
   "mcpServers": {
     "hubsoft": {
       "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/server/hubsoft-mcp.mjs"],
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/server/hubsoft-mcp.mjs"
+      ],
       "env": {
+        "HUBSOFT_NOME": "${user_config.nome}",
+        "HUBSOFT_DESCRICAO": "${user_config.descricao}",
         "HUBSOFT_URL": "${user_config.url}",
         "HUBSOFT_CLIENT_ID": "${user_config.client_id}",
         "HUBSOFT_CLIENT_SECRET": "${user_config.client_secret}",
         "HUBSOFT_USERNAME": "${user_config.username}",
         "HUBSOFT_PASSWORD": "${user_config.password}",
+        "HUBSOFT_2_NOME": "${user_config.nome_2}",
+        "HUBSOFT_2_DESCRICAO": "${user_config.descricao_2}",
+        "HUBSOFT_2_URL": "${user_config.url_2}",
+        "HUBSOFT_2_CLIENT_ID": "${user_config.client_id_2}",
+        "HUBSOFT_2_CLIENT_SECRET": "${user_config.client_secret_2}",
+        "HUBSOFT_2_USERNAME": "${user_config.username_2}",
+        "HUBSOFT_2_PASSWORD": "${user_config.password_2}",
+        "HUBSOFT_3_NOME": "${user_config.nome_3}",
+        "HUBSOFT_3_DESCRICAO": "${user_config.descricao_3}",
+        "HUBSOFT_3_URL": "${user_config.url_3}",
+        "HUBSOFT_3_CLIENT_ID": "${user_config.client_id_3}",
+        "HUBSOFT_3_CLIENT_SECRET": "${user_config.client_secret_3}",
+        "HUBSOFT_3_USERNAME": "${user_config.username_3}",
+        "HUBSOFT_3_PASSWORD": "${user_config.password_3}",
         "HUBSOFT_READ_ONLY": "${user_config.read_only}",
-        "HUBSOFT_GRAPHQL_PATH": "${user_config.graphql_path}"
+        "HUBSOFT_GRAPHQL_PATH": "${user_config.graphql_path}",
+        "HUBSOFT_CONFIG": "${user_config.arquivo_servidores}"
       }
     }
   }

@@ -10,6 +10,8 @@
   → cadastro, plano e status, PPPoE, ONU/VLAN, sessão RADIUS e faturas vencidas, numa resposta só
 "Quem está bloqueado por débito e quanto deve?"
   → lista filtrada no próprio Hubsoft, com dias suspenso e débito vencido de cada um
+"Procure o CPF 123… em todas as bases" / "…só na minha base pessoa física"
+  → consulta várias bases Hubsoft em paralelo, ou só a base citada
 ```
 
 ## O que vem no projeto
@@ -53,12 +55,49 @@ O administrador do provedor precisa:
 
 Cada pessoa usa **o próprio login**. Não há "super usuário" compartilhado, e as credenciais ficam só no computador dela.
 
+## Várias bases (multi-servidor)
+
+Provedores com mais de uma base Hubsoft (ex.: `base_pf`, `base_pj`, `base_vtal`) configuram todas de uma vez. Cada base tem:
+
+- **nome** curto: usado no parâmetro `servidor`;
+- **descrição**: o agente usa para escolher a base. "Procure na minha base pessoa física" consulta só a base cuja descrição diz "pessoa física".
+
+Comportamento:
+
+- **Sem indicar base**, a consulta roda em **todas em paralelo** e o resultado vem agrupado por base (`resultados.<base>`, `nao_encontrado_em`, `erros`). Uma base fora do ar não derruba as outras.
+- **Indicando base** (`servidor: "base_pf"`, `"base_pf,base_pj"` ou pela descrição), consulta só as bases citadas.
+- **Ações que alteram dados** (desbloqueio, envio de fatura) exigem uma única base.
+- `hubsoft_servidores` lista as bases e, com `testar=true`, verifica o login em cada uma.
+
+Como configurar:
+
+| Onde | Como |
+|---|---|
+| Plugin do Claude e extensão `.mcpb` | A tela de configuração tem **3 servidores** (o 1º obrigatório, o 2º e o 3º opcionais). Para mais de 3, aponte um `servidores.json` no campo "Arquivo com mais servidores". |
+| Variáveis de ambiente | Servidor 1: `HUBSOFT_NOME`, `HUBSOFT_DESCRICAO`, `HUBSOFT_URL`, …. Servidores 2 a 9: `HUBSOFT_2_NOME`, `HUBSOFT_2_URL`, `HUBSOFT_2_CLIENT_ID`, …. |
+| Arquivo (sem limite) | `~/.config/hubsoft/servidores.json`, ou o caminho em `HUBSOFT_CONFIG`. Exemplo abaixo. |
+
+```json
+{
+  "servidores": [
+    { "nome": "base_pf", "descricao": "Clientes pessoa física", "url": "https://api.pf.seuprovedor.com.br",
+      "client_id": "1", "client_secret": "{env:HS_PF_SECRET}", "usuario": "voce.api@provedor.com.br", "senha": "{env:HS_PF_SENHA}" },
+    { "nome": "base_pj", "descricao": "Clientes pessoa jurídica", "url": "https://api.pj.seuprovedor.com.br",
+      "client_id": "7", "client_secret": "{env:HS_PJ_SECRET}", "usuario": "voce.api@provedor.com.br", "senha": "{env:HS_PJ_SENHA}" }
+  ]
+}
+```
+
+`{env:VAR}` lê o valor de uma variável de ambiente, para não gravar segredos no arquivo. Se gravar, proteja com `chmod 600`.
+
+Com uma base só, nada muda: as respostas são as mesmas da v0.3.
+
 ## Instalação
 
 Nos exemplos abaixo, `HUBSOFT_MCP` é o comando do servidor:
 
 ```
-npx -y github:maxthetor/hubsoft_mcp#v0.3.0
+npx -y github:maxthetor/hubsoft_mcp#v0.4.0
 ```
 
 Ou clone o repositório e use `node /caminho/hubsoft_mcp/server/hubsoft-mcp.mjs`.
@@ -87,7 +126,7 @@ Baixe o `hubsoft-mcp.mcpb` da [última release](https://github.com/maxthetor/hub
   "mcp": {
     "hubsoft": {
       "type": "local",
-      "command": ["npx", "-y", "github:maxthetor/hubsoft_mcp#v0.3.0"],
+      "command": ["npx", "-y", "github:maxthetor/hubsoft_mcp#v0.4.0"],
       "enabled": true,
       "environment": {
         "HUBSOFT_URL": "https://api.seuprovedor.hubsoft.com.br",
@@ -112,7 +151,7 @@ Skill: copie `skills/hubsoft/` para `~/.config/opencode/skills/hubsoft/`. O Open
   "mcpServers": {
     "hubsoft": {
       "command": "npx",
-      "args": ["-y", "github:maxthetor/hubsoft_mcp#v0.3.0"],
+      "args": ["-y", "github:maxthetor/hubsoft_mcp#v0.4.0"],
       "env": {
         "HUBSOFT_URL": "https://api.seuprovedor.hubsoft.com.br",
         "HUBSOFT_CLIENT_ID": "...",
@@ -141,7 +180,7 @@ Skill: `.cursor/skills/hubsoft/` (Cursor) ou `~/.gemini/skills/hubsoft/` (Gemini
     "hubsoft": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "github:maxthetor/hubsoft_mcp#v0.3.0"],
+      "args": ["-y", "github:maxthetor/hubsoft_mcp#v0.4.0"],
       "env": {
         "HUBSOFT_URL": "https://api.seuprovedor.hubsoft.com.br",
         "HUBSOFT_CLIENT_ID": "...",
@@ -163,7 +202,7 @@ Skill: `.github/skills/hubsoft/`.
 ```toml
 [mcp_servers.hubsoft]
 command = "npx"
-args = ["-y", "github:maxthetor/hubsoft_mcp#v0.3.0"]
+args = ["-y", "github:maxthetor/hubsoft_mcp#v0.4.0"]
 env = { HUBSOFT_URL = "https://api.seuprovedor.hubsoft.com.br", HUBSOFT_CLIENT_ID = "...", HUBSOFT_CLIENT_SECRET = "...", HUBSOFT_USERNAME = "voce.api@provedor.com.br", HUBSOFT_PASSWORD = "..." }
 ```
 
@@ -186,6 +225,7 @@ node scripts/hubsoft.mjs graphql --query '{ pops(first: 10) { data { id_pop } } 
 
 | Ferramenta | Descrição |
 |---|---|
+| `hubsoft_servidores` | Lista as bases configuradas; `testar=true` verifica o login em cada uma |
 | `hubsoft_situacao_cliente` | **Visão 360°:** cadastro, serviços, endereço, PPPoE, ONU/VLAN/OLT, RADIUS e resumo financeiro (vencidas com dias de atraso, PIX e linha digitável; próxima a vencer) |
 | `hubsoft_servicos_por_status` | **Bloqueados/suspensos** ou qualquer status, filtrado no servidor, com débito vencido opcional |
 | `hubsoft_buscar_cliente` | Busca por CPF/CNPJ, código, nome, login, telefone… |
@@ -199,6 +239,8 @@ node scripts/hubsoft.mjs graphql --query '{ pops(first: 10) { data { id_pop } } 
 | `hubsoft_desbloqueio_confianca` ✏️ | Desbloqueio em confiança |
 | `hubsoft_enviar_fatura_email` ✏️ | Envia fatura por e-mail |
 
+Com 2 ou mais bases, todas as ferramentas aceitam o parâmetro `servidor` (padrão: todas).
+
 ✏️ As ferramentas de escrita ficam **desligadas por padrão** (`HUBSOFT_READ_ONLY=true`). Quando ligadas, vêm marcadas como destrutivas, para o agente pedir confirmação. Todas as ferramentas têm `title` e `readOnlyHint`/`destructiveHint`.
 
 **Atualizações do Hubsoft:** as ferramentas GraphQL leem o esquema **ao vivo**. Consultas novas que o Hubsoft lançar ficam disponíveis na hora, sem atualizar este projeto.
@@ -207,6 +249,8 @@ node scripts/hubsoft.mjs graphql --query '{ pops(first: 10) { data { id_pop } } 
 
 | Variável | Padrão | Descrição |
 |---|---|---|
+| `HUBSOFT_NOME` | `principal` | Nome curto da base (com várias bases) |
+| `HUBSOFT_DESCRICAO` | — | Descrição da base, ex.: "Clientes pessoa física" |
 | `HUBSOFT_URL` | — | URL da API, ex.: `https://api.seuprovedor.hubsoft.com.br` |
 | `HUBSOFT_CLIENT_ID` | — | Client ID do provedor |
 | `HUBSOFT_CLIENT_SECRET` | — | Client secret do provedor |
@@ -216,6 +260,9 @@ node scripts/hubsoft.mjs graphql --query '{ pops(first: 10) { data { id_pop } } 
 | `HUBSOFT_GRAPHQL_PATH` | `/graphql/v1` | `off` desativa o GraphQL |
 | `HUBSOFT_EXPOR_SENHAS` | `false` | `true` mostra senhas (ex.: PPPoE) nas respostas |
 | `HUBSOFT_MAX_RESPONSE_CHARS` | `60000` | Limite de tamanho das respostas |
+| `HUBSOFT_2_*` … `HUBSOFT_9_*` | — | Bases adicionais (mesmos sufixos: `NOME`, `DESCRICAO`, `URL`, `CLIENT_ID`, `CLIENT_SECRET`, `USERNAME`, `PASSWORD`, `GRAPHQL_PATH`) |
+| `HUBSOFT_CONFIG` | `~/.config/hubsoft/servidores.json` | Arquivo com a lista de bases |
+| `HUBSOFT_SERVIDOR` | primeira | Base usada por `npm run probe` e `npm run schema` |
 
 ## Desenvolvimento
 
