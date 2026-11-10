@@ -4,6 +4,18 @@ import { normalizarNome } from "./config.js";
 import { HubsoftClient } from "./client.js";
 import { collectTools, type ToolDef } from "./registry.js";
 import { fail, ok, run } from "./util.js";
+import { VERSION } from "./version.js";
+
+/** Estado das variáveis HUBSOFT_* recebidas (só nomes e estado, nunca valores). */
+export function diagnosticoVariaveis() {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env).sort()) {
+    if (!k.startsWith("HUBSOFT_")) continue;
+    const t = (v ?? "").trim();
+    out[k] = !t ? "vazia" : /^\$\{[^}]+\}$/.test(t) ? `não substituída (${t})` : "preenchida";
+  }
+  return out;
+}
 
 const TODOS = new Set(["", "todos", "todas", "all", "*"]);
 
@@ -82,12 +94,16 @@ export function collectMultiTools(servers: HubsoftConfig[]): ToolDef[] {
         "ou para diagnosticar falhas de acesso.",
       inputSchema: {
         testar: z.boolean().optional().describe("Testa a autenticação em cada servidor."),
+        diagnostico: z
+          .boolean()
+          .optional()
+          .describe("Mostra a versão e quais variáveis HUBSOFT_* o servidor recebeu (só nomes e estado, sem valores)."),
       },
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
-    cb: async ({ testar }: { testar?: boolean }) =>
-      run(max, async () =>
-        Promise.all(
+    cb: async ({ testar, diagnostico }: { testar?: boolean; diagnostico?: boolean }) =>
+      run(max, async () => {
+        const lista = await Promise.all(
           servers.map(async (s) => {
             const info: Record<string, unknown> = {
               nome: s.nome,
@@ -106,8 +122,9 @@ export function collectMultiTools(servers: HubsoftConfig[]): ToolDef[] {
             }
             return info;
           }),
-        ),
-      ),
+        );
+        return diagnostico ? { versao: VERSION, servidores: lista, variaveis: diagnosticoVariaveis() } : lista;
+      }),
   };
 
   if (servers.length === 1) {

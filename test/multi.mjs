@@ -67,6 +67,13 @@ assert.deepEqual(r.json.map(s => s.nome), ["base_pf", "base_pj", "base_vtal"], "
 assert.ok(r.json.every(s => s.login === "ok"), "login ok nas 3 (senha do vtal veio de {env:SENHA_VTAL})");
 assert.ok(!r.text.includes('"s"') && !r.text.includes("certa"), "sem segredos na listagem");
 
+r = await call(c, "hubsoft_servidores", { diagnostico: true });
+assert.match(r.json.versao, /^\d+\.\d+\.\d+$/);
+assert.equal(r.json.variaveis.HUBSOFT_2_URL, "preenchida");
+assert.match(r.json.variaveis.HUBSOFT_3_URL, /não substituída/);
+assert.ok(!r.text.includes("127.0.0.1") || r.text.includes("endereco"), "diagnóstico não expõe valores");
+assert.ok(!JSON.stringify(r.json.variaveis).includes("certa"));
+
 // "pesquise" → todas as bases
 r = await call(c, "hubsoft_situacao_cliente", { cpf_cnpj: "222.222.222-22" });
 assert.deepEqual(r.json.servidores_consultados, ["base_pf", "base_pj", "base_vtal"]);

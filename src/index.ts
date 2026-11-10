@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { loadServers } from "./config.js";
-import { collectMultiTools, instrucoesServidores } from "./multi.js";
+import { collectMultiTools, diagnosticoVariaveis, instrucoesServidores } from "./multi.js";
 import { setExposeSecrets } from "./util.js";
 import { VERSION } from "./version.js";
 
@@ -37,6 +37,7 @@ async function main() {
       servers.map((s) => `${s.nome}=${new URL(s.baseUrl).host}`).join(", ") +
       ` (${cfg.readOnly ? "somente leitura" : "leitura e escrita"})`,
   );
+  console.error(`hubsoft-mcp: variáveis recebidas ${JSON.stringify(diagnosticoVariaveis())}`);
 }
 
 main().catch((err) => {

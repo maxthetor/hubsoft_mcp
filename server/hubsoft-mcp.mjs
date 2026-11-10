@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// hubsoft-mcp 0.4.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
+// hubsoft-mcp 0.4.1 — https://github.com/maxthetor/hubsoft_mcp (MIT)
 // Arquivo gerado por scripts/bundle.mjs a partir de src/. Não edite.
 import { createRequire as __cr } from "node:module"; const require = __cr(import.meta.url);
 var __create = Object.create;
@@ -37467,7 +37467,19 @@ function collectTools(hs) {
   return defs;
 }
 
+// src/version.ts
+var VERSION = "0.4.1";
+
 // src/multi.ts
+function diagnosticoVariaveis() {
+  const out = {};
+  for (const [k, v] of Object.entries(process.env).sort()) {
+    if (!k.startsWith("HUBSOFT_")) continue;
+    const t = (v ?? "").trim();
+    out[k] = !t ? "vazia" : /^\$\{[^}]+\}$/.test(t) ? `n\xE3o substitu\xEDda (${t})` : "preenchida";
+  }
+  return out;
+}
 var TODOS = /* @__PURE__ */ new Set(["", "todos", "todas", "all", "*"]);
 function exigeUmServidor(t) {
   return t.config.annotations?.readOnlyHint === false && t.name !== "hubsoft_graphql";
@@ -37517,13 +37529,13 @@ function collectMultiTools(servers) {
       title: "Servidores (bases) Hubsoft configurados",
       description: "Lista as bases Hubsoft configuradas (nome, descri\xE7\xE3o, endere\xE7o, GraphQL). Com testar=true, verifica o login em cada uma. Use para saber em qual base procurar ou para diagnosticar falhas de acesso.",
       inputSchema: {
-        testar: external_exports.boolean().optional().describe("Testa a autentica\xE7\xE3o em cada servidor.")
+        testar: external_exports.boolean().optional().describe("Testa a autentica\xE7\xE3o em cada servidor."),
+        diagnostico: external_exports.boolean().optional().describe("Mostra a vers\xE3o e quais vari\xE1veis HUBSOFT_* o servidor recebeu (s\xF3 nomes e estado, sem valores).")
       },
       annotations: { readOnlyHint: true, openWorldHint: true }
     },
-    cb: async ({ testar }) => run(
-      max,
-      async () => Promise.all(
+    cb: async ({ testar, diagnostico }) => run(max, async () => {
+      const lista2 = await Promise.all(
         servers.map(async (s) => {
           const info = {
             nome: s.nome,
@@ -37542,8 +37554,9 @@ function collectMultiTools(servers) {
           }
           return info;
         })
-      )
-    )
+      );
+      return diagnostico ? { versao: VERSION, servidores: lista2, variaveis: diagnosticoVariaveis() } : lista2;
+    })
   };
   if (servers.length === 1) {
     return [toolServidores, ...collectTools(clientes.get(servers[0].nome))];
@@ -37618,9 +37631,6 @@ function collectMultiTools(servers) {
   return [toolServidores, ...combinadas];
 }
 
-// src/version.ts
-var VERSION = "0.4.0";
-
 // src/index.ts
 var INSTRUCTIONS = "Ferramentas para o ERP Hubsoft (provedores de internet). As chamadas usam o login do pr\xF3prio usu\xE1rio, ent\xE3o o acesso segue as permiss\xF5es dele no Hubsoft. Para perguntas sobre um cliente, comece por hubsoft_situacao_cliente (CPF/CNPJ ou c\xF3digo). Para listas de clientes bloqueados/suspensos ou por qualquer status de servi\xE7o, use hubsoft_servicos_por_status (filtra no servidor; n\xE3o varra a base). Para buscas por nome, login ou outros campos use hubsoft_buscar_cliente. Para relat\xF3rios por per\xEDodo, POPs, CPEs/ONUs, notas fiscais e sess\xF5es RADIUS, use as ferramentas GraphQL (hubsoft_graphql_consultas \u2192 hubsoft_graphql_tipo \u2192 hubsoft_graphql). Faturas com status 'aguardando' e vencimento futuro (ex.: parcelas de carn\xEA) n\xE3o est\xE3o vencidas. Senhas (ex.: PPPoE) s\xE3o mascaradas por padr\xE3o. Dados de clientes s\xE3o pessoais (LGPD): mostre apenas o necess\xE1rio. Antes de qualquer a\xE7\xE3o que altere dados, confirme cliente e servi\xE7o com o usu\xE1rio.";
 async function main() {
@@ -37636,6 +37646,7 @@ async function main() {
   console.error(
     `hubsoft-mcp ${VERSION}: ${servers.length} servidor(es) \u2014 ` + servers.map((s) => `${s.nome}=${new URL(s.baseUrl).host}`).join(", ") + ` (${cfg.readOnly ? "somente leitura" : "leitura e escrita"})`
   );
+  console.error(`hubsoft-mcp: vari\xE1veis recebidas ${JSON.stringify(diagnosticoVariaveis())}`);
 }
 main().catch((err) => {
   console.error(`hubsoft-mcp: ${err?.message ?? err}`);
