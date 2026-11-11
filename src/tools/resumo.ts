@@ -11,15 +11,35 @@ const MAX_PAGINAS = 200;
 /** Páginas buscadas em paralelo (a API aceita 20 req/s por IP). */
 const PARALELO = 4;
 
+/**
+ * Ordenação fixa por id_fatura: sem ela a API pagina sem ordem estável e registros
+ * mudam de página entre chamadas (faturas lidas duas vezes e outras puladas).
+ */
 const consulta = (campo: "data_pagamento" | "data_vencimento") => {
   const nome = campo === "data_pagamento" ? "faturasByDataPagamento" : "faturasByDataVencimento";
   return `query ($de: Date!, $ate: Date!, $page: Int) {
-  r: ${nome}(${campo}: { de: $de, ate: $ate }, first: ${POR_PAGINA}, page: $page) {
+  r: ${nome}(${campo}: { de: $de, ate: $ate }, first: ${POR_PAGINA}, page: $page, orderBy: [{ column: ID_FATURA, order: ASC }]) {
     paginatorInfo { lastPage total }
-    data { valor valor_pago data_vencimento data_pagamento ativo }
+    data { id_fatura valor valor_pago data_vencimento data_pagamento ativo }
   }
 }`;
 };
+
+/** Divide [de, ate] em fatias por mês do calendário (ex.: 15/08–10/10 → 15/08–31/08, 01/09–30/09, 01/10–10/10). */
+export function fatiasPorMes(de: string, ate: string): [string, string][] {
+  const out: [string, string][] = [];
+  let ini = de;
+  while (ini <= ate) {
+    const [y, m] = ini.split("-").map(Number);
+    const ultimoDia = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const fimMes = `${ini.slice(0, 7)}-${String(ultimoDia).padStart(2, "0")}`;
+    const fim = fimMes < ate ? fimMes : ate;
+    out.push([ini, fim]);
+    const prox = new Date(Date.UTC(y, m, 1));
+    ini = prox.toISOString().slice(0, 10);
+  }
+  return out;
+}
 
 type Agrupamento = "dia" | "mes" | "ano" | "total";
 
@@ -123,40 +143,68 @@ export function registerResumo(server: McpServer, hs: HubsoftClient) {
         const query = consulta(campo);
         const hoje = hojeBR();
 
-        const pagina = async (page: number) => {
-          const r = await hs.post(graphqlPath, { query, variables: { de: ini, ate: fim, page } });
+        const pagina = async (de: string, ate: string, page: number) => {
+          const r = await hs.post(graphqlPath, { query, variables: { de, ate, page } });
           if (r?.errors?.length) throw new Error(`GraphQL: ${r.errors.map((e: any) => e.message).join("; ")}`);
           return r?.data?.r ?? { paginatorInfo: { lastPage: 0, total: 0 }, data: [] };
         };
 
-        const primeira = await pagina(1);
-        const ultima = Number(primeira.paginatorInfo?.lastPage ?? 1);
-        const total = Number(primeira.paginatorInfo?.total ?? 0);
-        const alvo = Math.min(ultima, MAX_PAGINAS);
-        const lotes: any[][] = [primeira.data ?? []];
-        for (let p = 2; p <= alvo; p += PARALELO) {
-          const nums = Array.from({ length: Math.min(PARALELO, alvo - p + 1) }, (_, i) => p + i);
-          const res = await Promise.all(nums.map(pagina));
-          for (const r of res) lotes.push(r.data ?? []);
-        }
-
         const grupos = new Map<string, Acumulado>();
         const geral = novo();
+        const vistos = new Set<string>();
         let lidas = 0;
+        let repetidas = 0;
         let canceladas = 0;
-        for (const lote of lotes) {
-          for (const f of lote) {
-            lidas++;
-            if (f.ativo === false) {
-              canceladas++;
-              continue;
-            }
-            const d = isoDate(f[campo]);
-            if (!d) continue;
-            const k = chave(d, por);
-            if (!grupos.has(k)) grupos.set(k, novo());
-            somar(grupos.get(k)!, f, hoje);
-            somar(geral, f, hoje);
+        let totalApi = 0;
+        let paginas = 0;
+        let completo = true;
+        const problemas: string[] = [];
+
+        const processar = (f: any) => {
+          const id = String(f.id_fatura ?? "");
+          if (id && vistos.has(id)) {
+            repetidas++;
+            return false;
+          }
+          if (id) vistos.add(id);
+          lidas++;
+          if (f.ativo === false) {
+            canceladas++;
+            return true;
+          }
+          const d = isoDate(f[campo]);
+          if (!d) return true;
+          const k = chave(d, por);
+          if (!grupos.has(k)) grupos.set(k, novo());
+          somar(grupos.get(k)!, f, hoje);
+          somar(geral, f, hoje);
+          return true;
+        };
+
+        // Uma fatia por mês: paginação curta e estável (mesmo método que confere com consultas mensais).
+        for (const [deF, ateF] of fatiasPorMes(ini, fim)) {
+          if (paginas >= MAX_PAGINAS) {
+            completo = false;
+            problemas.push(`limite de ${MAX_PAGINAS} páginas atingido antes de ${deF}; reduza o período`);
+            break;
+          }
+          const primeira = await pagina(deF, ateF, 1);
+          paginas++;
+          const ultima = Number(primeira.paginatorInfo?.lastPage ?? 1);
+          const totalFatia = Number(primeira.paginatorInfo?.total ?? 0);
+          totalApi += totalFatia;
+          let unicasFatia = 0;
+          for (const f of primeira.data ?? []) if (processar(f)) unicasFatia++;
+          const alvo = Math.min(ultima, 1 + MAX_PAGINAS - paginas);
+          for (let p = 2; p <= alvo; p += PARALELO) {
+            const nums = Array.from({ length: Math.min(PARALELO, alvo - p + 1) }, (_, i) => p + i);
+            const res = await Promise.all(nums.map((n) => pagina(deF, ateF, n)));
+            paginas += nums.length;
+            for (const r of res) for (const f of r.data ?? []) if (processar(f)) unicasFatia++;
+          }
+          if (unicasFatia !== totalFatia) {
+            completo = false;
+            problemas.push(`${deF} a ${ateF}: ${unicasFatia} faturas únicas lidas, a API informou ${totalFatia}`);
           }
         }
 
@@ -165,9 +213,12 @@ export function registerResumo(server: McpServer, hs: HubsoftClient) {
           data: tipo,
           agrupar_por: por,
           faturas_lidas: lidas,
+          total_informado_api: totalApi,
+          repetidas_descartadas: repetidas,
           canceladas_ignoradas: canceladas,
-          completo: alvo === ultima && lidas >= total,
-          ...(alvo < ultima ? { aviso: `Limite de ${MAX_PAGINAS * POR_PAGINA} faturas atingido; reduza o período.` } : {}),
+          paginas_consultadas: paginas,
+          completo,
+          ...(problemas.length ? { aviso: `Resultado possivelmente incompleto: ${problemas.join("; ")}` } : {}),
           grupos: [...grupos.entries()]
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([periodo, a]) => ({ periodo, ...formatar(a, tipo) })),

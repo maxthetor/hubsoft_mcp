@@ -1,7 +1,7 @@
 {
   "name": "hubsoft",
   "displayName": "Hubsoft (não oficial)",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Consulte uma ou várias bases do ERP Hubsoft com as permissões do seu próprio usuário: clientes, bloqueados, PPPoE, ONU, RADIUS, faturas, atendimentos e OS.",
   "author": {
     "name": "Marcelo",

@@ -59,3 +59,5 @@ Atendimentos abertos no mês:
 - Peça só os campos necessários; `first` alto com muitos campos gera respostas enormes.
 - `ClienteServicoAutenticacao.password` contém a senha PPPoE e é mascarada pelo cliente. Não a solicite.
 - Para varrer todas as páginas, itere `page` até `hasMorePages = false`, e só quando realmente necessário.
+- **Sempre use `orderBy` fixo ao paginar** (ex.: `orderBy: [{ column: ID_FATURA, order: ASC }]`). Sem ele a ordem muda entre chamadas: registros aparecem em duas páginas e outros somem. Descarte IDs repetidos e confira o total contra `paginatorInfo.total`.
+- `first` aceita no máximo 1000.

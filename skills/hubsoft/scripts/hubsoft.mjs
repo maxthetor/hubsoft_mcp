@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// hubsoft-mcp 0.5.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
+// hubsoft-mcp 0.5.1 — https://github.com/maxthetor/hubsoft_mcp (MIT)
 // Arquivo gerado por scripts/bundle.mjs a partir de src/. Não edite.
 import { createRequire as __cr } from "node:module"; const require = __cr(import.meta.url);
 var __defProp = Object.defineProperty;
@@ -20289,12 +20289,26 @@ var PARALELO = 4;
 var consulta = (campo) => {
   const nome = campo === "data_pagamento" ? "faturasByDataPagamento" : "faturasByDataVencimento";
   return `query ($de: Date!, $ate: Date!, $page: Int) {
-  r: ${nome}(${campo}: { de: $de, ate: $ate }, first: ${POR_PAGINA}, page: $page) {
+  r: ${nome}(${campo}: { de: $de, ate: $ate }, first: ${POR_PAGINA}, page: $page, orderBy: [{ column: ID_FATURA, order: ASC }]) {
     paginatorInfo { lastPage total }
-    data { valor valor_pago data_vencimento data_pagamento ativo }
+    data { id_fatura valor valor_pago data_vencimento data_pagamento ativo }
   }
 }`;
 };
+function fatiasPorMes(de, ate) {
+  const out2 = [];
+  let ini = de;
+  while (ini <= ate) {
+    const [y, m] = ini.split("-").map(Number);
+    const ultimoDia = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const fimMes = `${ini.slice(0, 7)}-${String(ultimoDia).padStart(2, "0")}`;
+    const fim = fimMes < ate ? fimMes : ate;
+    out2.push([ini, fim]);
+    const prox = new Date(Date.UTC(y, m, 1));
+    ini = prox.toISOString().slice(0, 10);
+  }
+  return out2;
+}
 function chave(data, por) {
   if (por === "dia") return data;
   if (por === "mes") return data.slice(0, 7);
@@ -20363,38 +20377,64 @@ function registerResumo(server, hs) {
       const campo = tipo === "pagamento" ? "data_pagamento" : "data_vencimento";
       const query = consulta(campo);
       const hoje = hojeBR();
-      const pagina = async (page) => {
-        const r = await hs.post(graphqlPath2, { query, variables: { de: ini, ate: fim, page } });
+      const pagina = async (de2, ate2, page) => {
+        const r = await hs.post(graphqlPath2, { query, variables: { de: de2, ate: ate2, page } });
         if (r?.errors?.length) throw new Error(`GraphQL: ${r.errors.map((e) => e.message).join("; ")}`);
         return r?.data?.r ?? { paginatorInfo: { lastPage: 0, total: 0 }, data: [] };
       };
-      const primeira = await pagina(1);
-      const ultima = Number(primeira.paginatorInfo?.lastPage ?? 1);
-      const total = Number(primeira.paginatorInfo?.total ?? 0);
-      const alvo = Math.min(ultima, MAX_PAGINAS);
-      const lotes = [primeira.data ?? []];
-      for (let p = 2; p <= alvo; p += PARALELO) {
-        const nums = Array.from({ length: Math.min(PARALELO, alvo - p + 1) }, (_, i) => p + i);
-        const res = await Promise.all(nums.map(pagina));
-        for (const r of res) lotes.push(r.data ?? []);
-      }
       const grupos = /* @__PURE__ */ new Map();
       const geral = novo();
+      const vistos = /* @__PURE__ */ new Set();
       let lidas = 0;
+      let repetidas = 0;
       let canceladas = 0;
-      for (const lote of lotes) {
-        for (const f of lote) {
-          lidas++;
-          if (f.ativo === false) {
-            canceladas++;
-            continue;
-          }
-          const d = isoDate(f[campo]);
-          if (!d) continue;
-          const k = chave(d, por);
-          if (!grupos.has(k)) grupos.set(k, novo());
-          somar(grupos.get(k), f, hoje);
-          somar(geral, f, hoje);
+      let totalApi = 0;
+      let paginas = 0;
+      let completo = true;
+      const problemas = [];
+      const processar = (f) => {
+        const id = String(f.id_fatura ?? "");
+        if (id && vistos.has(id)) {
+          repetidas++;
+          return false;
+        }
+        if (id) vistos.add(id);
+        lidas++;
+        if (f.ativo === false) {
+          canceladas++;
+          return true;
+        }
+        const d = isoDate(f[campo]);
+        if (!d) return true;
+        const k = chave(d, por);
+        if (!grupos.has(k)) grupos.set(k, novo());
+        somar(grupos.get(k), f, hoje);
+        somar(geral, f, hoje);
+        return true;
+      };
+      for (const [deF, ateF] of fatiasPorMes(ini, fim)) {
+        if (paginas >= MAX_PAGINAS) {
+          completo = false;
+          problemas.push(`limite de ${MAX_PAGINAS} p\xE1ginas atingido antes de ${deF}; reduza o per\xEDodo`);
+          break;
+        }
+        const primeira = await pagina(deF, ateF, 1);
+        paginas++;
+        const ultima = Number(primeira.paginatorInfo?.lastPage ?? 1);
+        const totalFatia = Number(primeira.paginatorInfo?.total ?? 0);
+        totalApi += totalFatia;
+        let unicasFatia = 0;
+        for (const f of primeira.data ?? []) if (processar(f)) unicasFatia++;
+        const alvo = Math.min(ultima, 1 + MAX_PAGINAS - paginas);
+        for (let p = 2; p <= alvo; p += PARALELO) {
+          const nums = Array.from({ length: Math.min(PARALELO, alvo - p + 1) }, (_, i) => p + i);
+          const res = await Promise.all(nums.map((n) => pagina(deF, ateF, n)));
+          paginas += nums.length;
+          for (const r of res) for (const f of r.data ?? []) if (processar(f)) unicasFatia++;
+        }
+        if (unicasFatia !== totalFatia) {
+          completo = false;
+          problemas.push(`${deF} a ${ateF}: ${unicasFatia} faturas \xFAnicas lidas, a API informou ${totalFatia}`);
         }
       }
       return {
@@ -20402,9 +20442,12 @@ function registerResumo(server, hs) {
         data: tipo,
         agrupar_por: por,
         faturas_lidas: lidas,
+        total_informado_api: totalApi,
+        repetidas_descartadas: repetidas,
         canceladas_ignoradas: canceladas,
-        completo: alvo === ultima && lidas >= total,
-        ...alvo < ultima ? { aviso: `Limite de ${MAX_PAGINAS * POR_PAGINA} faturas atingido; reduza o per\xEDodo.` } : {},
+        paginas_consultadas: paginas,
+        completo,
+        ...problemas.length ? { aviso: `Resultado possivelmente incompleto: ${problemas.join("; ")}` } : {},
         grupos: [...grupos.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([periodo, a]) => ({ periodo, ...formatar(a, tipo) })),
         totais: formatar(geral, tipo)
       };
@@ -20693,7 +20736,7 @@ function collectTools(hs) {
 }
 
 // src/version.ts
-var VERSION = "0.5.0";
+var VERSION = "0.5.1";
 
 // src/multi.ts
 function diagnosticoVariaveis() {

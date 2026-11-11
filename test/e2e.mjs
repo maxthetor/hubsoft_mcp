@@ -16,16 +16,26 @@ const faturaReal = (id, venc, status) => ({
   cliente: { codigo_cliente: 77, servico: { id_cliente_servico: 1, endereco_cadastral: endereco, endereco_instalacao: endereco, endereco_fiscal: endereco, endereco_cobranca: endereco } },
 });
 const calls = [];
+const TODAS = [
+  ...Array.from({ length: 2500 }, (_, i) => ({ id_fatura: String(1000 + i), valor: 100 + (i % 7), valor_pago: 99.5 + (i % 7), ativo: i % 50 !== 0,
+    data_vencimento: "2026-10-10", data_pagamento: i < 1500 ? `2026-10-${String(1 + (i % 28)).padStart(2, "0")}` : `2026-11-${String(1 + (i % 28)).padStart(2, "0")}` })),
+  ...Array.from({ length: 1500 }, (_, i) => ({ id_fatura: String(9000 + i), valor: 50, valor_pago: 50, ativo: true, data_vencimento: "2026-12-01", data_pagamento: "2026-12-05" })),
+];
+const esperado = (de, ate) => TODAS.filter(f => f.ativo && f.data_pagamento >= de && f.data_pagamento <= ate);
+const soma = (l, k) => Math.round(l.reduce((s, f) => s + f[k], 0) * 100) / 100;
 const srv = http.createServer((q, r) => { let b = ""; q.on("data", d => b += d); q.on("end", () => {
   const send = o => { r.writeHead(200, { "Content-Type": "application/json" }); r.end(JSON.stringify(o)); };
   calls.push(`${q.method} ${q.url}`);
   if (q.url === "/oauth/token") return send({ token_type: "Bearer", access_token: "t", expires_in: 2592000 });
   if (q.url === "/graphql/v1" && b.includes("faturasByDataPagamento")) {
-    // 2.500 faturas pagas: 1.500 em out/2026 e 1.000 em nov/2026; 1 em cada 50 inativa
-    const { page } = JSON.parse(b).variables; const ini = (page - 1) * 1000;
-    const todas = Array.from({ length: 2500 }, (_, i) => ({ valor: 100, valor_pago: 99.5, ativo: i % 50 !== 0,
-      data_vencimento: "2026-10-10", data_pagamento: i < 1500 ? "2026-10-15" : "2026-11-05" }));
-    return send({ data: { r: { paginatorInfo: { lastPage: 3, total: 2500 }, data: todas.slice(ini, ini + 1000) } } });
+    // 2.500 faturas pagas: 1.500 em out/2026 e 1.000 em nov/2026; 1 em cada 50 inativa.
+    // Como a API real: SEM orderBy, a ordem muda a cada chamada (páginas se sobrepõem).
+    const j = JSON.parse(b); const { de, ate, page } = j.variables;
+    let todas = TODAS.filter(f => f.data_pagamento >= de && f.data_pagamento <= ate);
+    if (!j.query.includes("orderBy")) todas = [...todas].sort(() => Math.random() - 0.5);
+    let pg = todas.slice((page - 1) * 1000, page * 1000);
+    if (de === "2026-12-01" && page === 2) pg = [todas[0], ...pg.slice(1)]; // repetida injetada
+    return send({ data: { r: { paginatorInfo: { lastPage: Math.max(1, Math.ceil(todas.length / 1000)), total: todas.length }, data: pg } } });
   }
   if (q.url === "/graphql/v1") { const j = JSON.parse(b);
     if (j.variables?.v === "12345678900") return send({ data: { cliente: null } }); // só acha com máscara
@@ -96,11 +106,20 @@ assert.ok(calls.some(x => x.includes("cliente/todos?servico_status=suspenso_debi
 const rf = await c.callTool({ name: "hubsoft_resumo_financeiro", arguments: { de: "01/10/2026", ate: "2026-11-30" } });
 assert.ok(!rf.content[0].text.includes("\n"), "JSON compacto, sem indentação");
 const ro = JSON.parse(rf.content[0].text);
-assert.equal(ro.faturas_lidas, 2500); assert.equal(ro.canceladas_ignoradas, 50); assert.equal(ro.completo, true);
+assert.equal(ro.faturas_lidas, 2500); assert.equal(ro.total_informado_api, 2500); assert.equal(ro.repetidas_descartadas, 0);
+assert.equal(ro.canceladas_ignoradas, 50); assert.equal(ro.completo, true);
 assert.deepEqual(ro.grupos.map(g => g.periodo), ["2026-10", "2026-11"]);
-assert.equal(ro.grupos[0].faturas, 1470); assert.equal(ro.grupos[1].faturas, 980);
-assert.equal(ro.totais.faturas, 2450); assert.equal(ro.totais.total_pago, 243775); assert.equal(ro.totais.total_faturado, 245000);
-assert.equal(calls.filter(x => x === "POST /graphql/v1").length >= 3, true, "percorreu as 3 páginas");
+const outu = esperado("2026-10-01", "2026-10-31"), nov = esperado("2026-11-01", "2026-11-30");
+assert.equal(ro.grupos[0].faturas, outu.length); assert.equal(ro.grupos[0].total_pago, soma(outu, "valor_pago"));
+assert.equal(ro.grupos[1].total_pago, soma(nov, "valor_pago"));
+assert.equal(ro.totais.total_pago, Math.round((soma(outu, "valor_pago") + soma(nov, "valor_pago")) * 100) / 100, "período inteiro = soma dos meses");
+assert.equal(ro.totais.total_faturado, Math.round((soma(outu, "valor") + soma(nov, "valor")) * 100) / 100);
+// mesmo período, agrupado no total, tem que dar o mesmo número (o bug dava diferente)
+const rt = JSON.parse((await c.callTool({ name: "hubsoft_resumo_financeiro", arguments: { de: "2026-10-01", ate: "2026-11-30", agrupar_por: "total" } })).content[0].text);
+assert.equal(rt.totais.total_pago, ro.totais.total_pago);
+// fatura repetida pela API: descartada e sinalizada
+const rd = JSON.parse((await c.callTool({ name: "hubsoft_resumo_financeiro", arguments: { de: "2026-12-01", ate: "2026-12-31" } })).content[0].text);
+assert.equal(rd.repetidas_descartadas, 1); assert.equal(rd.faturas_lidas, 1499); assert.equal(rd.completo, false); assert.match(rd.aviso, /1499 faturas únicas/);
 const rerr = await c.callTool({ name: "hubsoft_resumo_financeiro", arguments: { de: "2026-11-30", ate: "2026-10-01" } });
 assert.equal(rerr.isError, true);
 
