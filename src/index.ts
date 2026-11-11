@@ -11,6 +11,8 @@ export const INSTRUCTIONS =
   "Para perguntas sobre um cliente, comece por hubsoft_situacao_cliente (CPF/CNPJ ou código). " +
   "Para listas de clientes bloqueados/suspensos ou por qualquer status de serviço, use " +
   "hubsoft_servicos_por_status (filtra no servidor; não varra a base). " +
+  "Para totais de um período (faturamento, recebimentos, inadimplência por mês), use " +
+  "hubsoft_resumo_financeiro, que pagina e soma no servidor; nunca pagine faturas para somar. " +
   "Para buscas por nome, login ou outros campos use hubsoft_buscar_cliente. " +
   "Para relatórios por período, POPs, CPEs/ONUs, notas fiscais e sessões RADIUS, use as " +
   "ferramentas GraphQL (hubsoft_graphql_consultas → hubsoft_graphql_tipo → hubsoft_graphql). " +

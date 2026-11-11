@@ -20,6 +20,13 @@ const srv = http.createServer((q, r) => { let b = ""; q.on("data", d => b += d);
   const send = o => { r.writeHead(200, { "Content-Type": "application/json" }); r.end(JSON.stringify(o)); };
   calls.push(`${q.method} ${q.url}`);
   if (q.url === "/oauth/token") return send({ token_type: "Bearer", access_token: "t", expires_in: 2592000 });
+  if (q.url === "/graphql/v1" && b.includes("faturasByDataPagamento")) {
+    // 2.500 faturas pagas: 1.500 em out/2026 e 1.000 em nov/2026; 1 em cada 50 inativa
+    const { page } = JSON.parse(b).variables; const ini = (page - 1) * 1000;
+    const todas = Array.from({ length: 2500 }, (_, i) => ({ valor: 100, valor_pago: 99.5, ativo: i % 50 !== 0,
+      data_vencimento: "2026-10-10", data_pagamento: i < 1500 ? "2026-10-15" : "2026-11-05" }));
+    return send({ data: { r: { paginatorInfo: { lastPage: 3, total: 2500 }, data: todas.slice(ini, ini + 1000) } } });
+  }
   if (q.url === "/graphql/v1") { const j = JSON.parse(b);
     if (j.variables?.v === "12345678900") return send({ data: { cliente: null } }); // só acha com máscara
     return send({ data: { cliente: { codigo_cliente: 77, nome_razaosocial: "Fulano", servicos: [
@@ -85,6 +92,17 @@ assert.equal(so.servicos[0].debito_vencido.faturas, 1);
 assert.equal(so.debito_vencido_total, 230.8);
 assert.ok(!st.content[0].text.includes("SECRETO") && !st.content[0].text.includes("pppoe!"), "sem RG nem senha na lista");
 assert.ok(calls.some(x => x.includes("cliente/todos?servico_status=suspenso_debito&itens_por_pagina=100&pagina=1")));
+
+const rf = await c.callTool({ name: "hubsoft_resumo_financeiro", arguments: { de: "01/10/2026", ate: "2026-11-30" } });
+assert.ok(!rf.content[0].text.includes("\n"), "JSON compacto, sem indentação");
+const ro = JSON.parse(rf.content[0].text);
+assert.equal(ro.faturas_lidas, 2500); assert.equal(ro.canceladas_ignoradas, 50); assert.equal(ro.completo, true);
+assert.deepEqual(ro.grupos.map(g => g.periodo), ["2026-10", "2026-11"]);
+assert.equal(ro.grupos[0].faturas, 1470); assert.equal(ro.grupos[1].faturas, 980);
+assert.equal(ro.totais.faturas, 2450); assert.equal(ro.totais.total_pago, 243775); assert.equal(ro.totais.total_faturado, 245000);
+assert.equal(calls.filter(x => x === "POST /graphql/v1").length >= 3, true, "percorreu as 3 páginas");
+const rerr = await c.callTool({ name: "hubsoft_resumo_financeiro", arguments: { de: "2026-11-30", ate: "2026-10-01" } });
+assert.equal(rerr.isError, true);
 
 const g = await c.callTool({ name: "hubsoft_graphql", arguments: { query: "mutation { x }" } });
 assert.equal(g.isError, true, "mutation deve ser bloqueada");

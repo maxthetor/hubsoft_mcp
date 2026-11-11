@@ -67,6 +67,33 @@ export function resolverServidores(servers: HubsoftConfig[], pedido?: string): H
   return out;
 }
 
+/** Soma campos numéricos de objetos (para consolidar totais de várias bases). */
+function somarNumeros(alvo: Record<string, any>, origem: Record<string, any>) {
+  for (const [k, v] of Object.entries(origem)) {
+    if (typeof v === "number") alvo[k] = Math.round(((alvo[k] ?? 0) + v) * 100) / 100;
+  }
+  return alvo;
+}
+
+/** Resultados com `grupos` (por `periodo`) e `totais` — ex.: hubsoft_resumo_financeiro — ganham um consolidado. */
+function consolidar(resultados: Record<string, any>) {
+  const lista = Object.values(resultados);
+  if (lista.length < 2 || !lista.every((r) => r && Array.isArray(r.grupos) && r.totais)) return undefined;
+  const grupos = new Map<string, Record<string, any>>();
+  const totais: Record<string, any> = {};
+  for (const r of lista) {
+    for (const g of r.grupos) {
+      const { periodo, ...nums } = g;
+      grupos.set(periodo, somarNumeros(grupos.get(periodo) ?? {}, nums));
+    }
+    somarNumeros(totais, r.totais);
+  }
+  return {
+    grupos: [...grupos.entries()].sort(([a], [b]) => String(a).localeCompare(String(b))).map(([periodo, n]) => ({ periodo, ...n })),
+    totais,
+  };
+}
+
 function parse(text: string): unknown {
   try {
     return JSON.parse(text);
@@ -200,6 +227,8 @@ export function collectMultiTools(servers: HubsoftConfig[]): ToolDef[] {
             else if ((r.dado as any)?.encontrado === false) naoEncontrado.push(r.s.nome);
             else saida.resultados[r.s.nome] = r.dado;
           }
+          const consolidado = consolidar(saida.resultados);
+          if (consolidado) saida.consolidado_todas_bases = consolidado;
           if (naoEncontrado.length) saida.nao_encontrado_em = naoEncontrado;
           if (Object.keys(erros).length) saida.erros = erros;
           if (!Object.keys(saida.resultados).length && !naoEncontrado.length) {

@@ -25,9 +25,9 @@ export function redact(v: unknown): unknown {
   return v;
 }
 
-/** Formata a resposta para o modelo, mascarando segredos e truncando respostas grandes. */
+/** Formata a resposta para o modelo: JSON compacto (sem indentação), segredos mascarados, truncado se grande. */
 export function ok(data: unknown, maxChars: number) {
-  let text = JSON.stringify(redact(data), null, 2);
+  let text = JSON.stringify(redact(data));
   if (text.length > maxChars) {
     text =
       text.slice(0, maxChars) +

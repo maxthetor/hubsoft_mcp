@@ -183,7 +183,15 @@ async function main() {
   const shape = t.config.inputSchema ?? {};
   const args = z.object(shape).parse(parseArgs(rest, shape));
   const r = await t.cb(args);
-  const text = r.content.map((c) => c.text).join("\n");
+  let text = r.content.map((c) => c.text).join("\n");
+  // No terminal, mostra JSON indentado; em pipes/agentes, mantém compacto.
+  if (process.stdout.isTTY && !r.isError) {
+    try {
+      text = JSON.stringify(JSON.parse(text), null, 2);
+    } catch {
+      /* não é JSON puro (ex.: truncado) */
+    }
+  }
   if (r.isError) {
     err(text);
     process.exitCode = 1;

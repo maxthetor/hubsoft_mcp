@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "hubsoft-mcp",
   "display_name": "Hubsoft (não oficial)",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Consulte uma ou várias bases do ERP Hubsoft (clientes, bloqueados, faturas, RADIUS) com as permissões do seu próprio usuário.",
   "long_description": "Servidor MCP não oficial para o Hubsoft, ERP de provedores de internet. Cada pessoa usa o próprio login do Hubsoft; as credenciais ficam só no computador dela. Modo somente leitura por padrão.",
   "author": {
@@ -65,6 +65,10 @@
     {
       "name": "hubsoft_servicos_por_status",
       "description": "Serviços por status: bloqueados/suspensos (filtro no servidor), com débito vencido opcional"
+    },
+    {
+      "name": "hubsoft_resumo_financeiro",
+      "description": "Totais de faturas por período (pago, faturado, em aberto, vencido), somados no servidor"
     },
     {
       "name": "hubsoft_buscar_cliente",

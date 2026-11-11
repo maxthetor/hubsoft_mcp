@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// hubsoft-mcp 0.4.1 — https://github.com/maxthetor/hubsoft_mcp (MIT)
+// hubsoft-mcp 0.5.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
 // Arquivo gerado por scripts/bundle.mjs a partir de src/. Não edite.
 import { createRequire as __cr } from "node:module"; const require = __cr(import.meta.url);
 var __defProp = Object.defineProperty;
@@ -3521,7 +3521,7 @@ function handleCatchall(proms, input2, payload, ctx, def, inst, abortEarly) {
     }
     const r = _catchall.run({ value: input2[key], issues: [] }, ctx);
     if (r instanceof Promise) {
-      proms.push(r.then((r2) => handlePropertyResult(r2, payload, key, input2, optin, optout)));
+      proms.push(r.then((r3) => handlePropertyResult(r3, payload, key, input2, optin, optout)));
     } else {
       handlePropertyResult(r, payload, key, input2, optin, optout);
     }
@@ -3609,7 +3609,7 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
       const optout = el._zod.optout;
       const r = el._zod.run({ value: input2[key], issues: [] }, ctx);
       if (r instanceof Promise) {
-        proms.push(r.then((r2) => handlePropertyResult(r2, payload, key, input2, optin, optout)));
+        proms.push(r.then((r3) => handlePropertyResult(r3, payload, key, input2, optin, optout)));
       } else {
         handlePropertyResult(r, payload, key, input2, optin, optout);
       }
@@ -5036,7 +5036,7 @@ var $ZodCustom = /* @__PURE__ */ $constructor("$ZodCustom", (inst, def) => {
     const input2 = payload.value;
     const r = def.fn(input2);
     if (r instanceof Promise) {
-      return r.then((r2) => handleRefineResult(r2, payload, input2, inst));
+      return r.then((r3) => handleRefineResult(r3, payload, input2, inst));
     }
     handleRefineResult(r, payload, input2, inst);
     return;
@@ -20001,7 +20001,7 @@ function redact(v) {
   return v;
 }
 function ok(data, maxChars) {
-  let text = JSON.stringify(redact(data), null, 2);
+  let text = JSON.stringify(redact(data));
   if (text.length > maxChars) {
     text = text.slice(0, maxChars) + `
 
@@ -20282,6 +20282,136 @@ function registerStatus(server, hs) {
   );
 }
 
+// src/tools/resumo.ts
+var POR_PAGINA = 1e3;
+var MAX_PAGINAS = 200;
+var PARALELO = 4;
+var consulta = (campo) => {
+  const nome = campo === "data_pagamento" ? "faturasByDataPagamento" : "faturasByDataVencimento";
+  return `query ($de: Date!, $ate: Date!, $page: Int) {
+  r: ${nome}(${campo}: { de: $de, ate: $ate }, first: ${POR_PAGINA}, page: $page) {
+    paginatorInfo { lastPage total }
+    data { valor valor_pago data_vencimento data_pagamento ativo }
+  }
+}`;
+};
+function chave(data, por) {
+  if (por === "dia") return data;
+  if (por === "mes") return data.slice(0, 7);
+  if (por === "ano") return data.slice(0, 4);
+  return "total";
+}
+var r2 = (n) => Math.round(n * 100) / 100;
+function novo() {
+  return { faturas: 0, total_faturado: 0, pagas: 0, total_pago: 0, em_aberto: 0, valor_em_aberto: 0, vencidas_em_aberto: 0, valor_vencido: 0 };
+}
+function somar(a, f, hoje) {
+  const valor = Number(f.valor ?? 0);
+  a.faturas++;
+  a.total_faturado += valor;
+  if (f.data_pagamento) {
+    a.pagas++;
+    a.total_pago += Number(f.valor_pago ?? valor);
+  } else {
+    a.em_aberto++;
+    a.valor_em_aberto += valor;
+    const venc = isoDate(f.data_vencimento);
+    if (venc && venc < hoje) {
+      a.vencidas_em_aberto++;
+      a.valor_vencido += valor;
+    }
+  }
+}
+function formatar(a, data) {
+  if (data === "pagamento") {
+    return { faturas: a.faturas, total_pago: r2(a.total_pago), total_faturado: r2(a.total_faturado) };
+  }
+  return {
+    faturas: a.faturas,
+    total_faturado: r2(a.total_faturado),
+    pagas: a.pagas,
+    total_pago: r2(a.total_pago),
+    em_aberto: a.em_aberto,
+    valor_em_aberto: r2(a.valor_em_aberto),
+    vencidas_em_aberto: a.vencidas_em_aberto,
+    valor_vencido: r2(a.valor_vencido)
+  };
+}
+function registerResumo(server, hs) {
+  const { graphqlPath: graphqlPath2, maxResponseChars: max } = hs.config;
+  if (!graphqlPath2) return;
+  server.registerTool(
+    "hubsoft_resumo_financeiro",
+    {
+      title: "Resumo financeiro por per\xEDodo (totais)",
+      description: "Totais de faturas num per\xEDodo, somados no pr\xF3prio servidor: percorre todas as p\xE1ginas e devolve s\xF3 os n\xFAmeros por dia, m\xEAs ou ano. Use para faturamento, recebimentos e inadimpl\xEAncia de um per\xEDodo \u2014 nunca pagine faturas manualmente para somar. data='pagamento' (padr\xE3o): faturas pagas no per\xEDodo (quantidade, total pago, total faturado). data='vencimento': faturas que vencem no per\xEDodo (faturado, pago, em aberto e vencido em aberto). Faturas inativas (canceladas) s\xE3o ignoradas e contadas \xE0 parte.",
+      inputSchema: {
+        de: external_exports.string().describe("Data inicial, aaaa-mm-dd (ou dd/mm/aaaa)."),
+        ate: external_exports.string().describe("Data final, inclusive, aaaa-mm-dd (ou dd/mm/aaaa)."),
+        data: external_exports.enum(["pagamento", "vencimento"]).optional().describe("Qual data filtra e agrupa as faturas. Padr\xE3o: pagamento."),
+        agrupar_por: external_exports.enum(["dia", "mes", "ano", "total"]).optional().describe("Agrupamento. Padr\xE3o: mes.")
+      },
+      annotations: { readOnlyHint: true, openWorldHint: true }
+    },
+    async ({ de, ate, data, agrupar_por }) => run(max, async () => {
+      const ini = isoDate(de);
+      const fim = isoDate(ate);
+      if (!ini || !fim) throw new Error("Use datas no formato aaaa-mm-dd (ou dd/mm/aaaa).");
+      if (fim < ini) throw new Error("A data final \xE9 anterior \xE0 inicial.");
+      const tipo = data ?? "pagamento";
+      const por = agrupar_por ?? "mes";
+      const campo = tipo === "pagamento" ? "data_pagamento" : "data_vencimento";
+      const query = consulta(campo);
+      const hoje = hojeBR();
+      const pagina = async (page) => {
+        const r = await hs.post(graphqlPath2, { query, variables: { de: ini, ate: fim, page } });
+        if (r?.errors?.length) throw new Error(`GraphQL: ${r.errors.map((e) => e.message).join("; ")}`);
+        return r?.data?.r ?? { paginatorInfo: { lastPage: 0, total: 0 }, data: [] };
+      };
+      const primeira = await pagina(1);
+      const ultima = Number(primeira.paginatorInfo?.lastPage ?? 1);
+      const total = Number(primeira.paginatorInfo?.total ?? 0);
+      const alvo = Math.min(ultima, MAX_PAGINAS);
+      const lotes = [primeira.data ?? []];
+      for (let p = 2; p <= alvo; p += PARALELO) {
+        const nums = Array.from({ length: Math.min(PARALELO, alvo - p + 1) }, (_, i) => p + i);
+        const res = await Promise.all(nums.map(pagina));
+        for (const r of res) lotes.push(r.data ?? []);
+      }
+      const grupos = /* @__PURE__ */ new Map();
+      const geral = novo();
+      let lidas = 0;
+      let canceladas = 0;
+      for (const lote of lotes) {
+        for (const f of lote) {
+          lidas++;
+          if (f.ativo === false) {
+            canceladas++;
+            continue;
+          }
+          const d = isoDate(f[campo]);
+          if (!d) continue;
+          const k = chave(d, por);
+          if (!grupos.has(k)) grupos.set(k, novo());
+          somar(grupos.get(k), f, hoje);
+          somar(geral, f, hoje);
+        }
+      }
+      return {
+        periodo: { de: ini, ate: fim },
+        data: tipo,
+        agrupar_por: por,
+        faturas_lidas: lidas,
+        canceladas_ignoradas: canceladas,
+        completo: alvo === ultima && lidas >= total,
+        ...alvo < ultima ? { aviso: `Limite de ${MAX_PAGINAS * POR_PAGINA} faturas atingido; reduza o per\xEDodo.` } : {},
+        grupos: [...grupos.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([periodo, a]) => ({ periodo, ...formatar(a, tipo) })),
+        totais: formatar(geral, tipo)
+      };
+    })
+  );
+}
+
 // src/tools/leitura.ts
 var READ = { readOnlyHint: true, openWorldHint: true };
 var busca = external_exports.string().describe(
@@ -20555,6 +20685,7 @@ function collectTools(hs) {
   };
   registerSituacao(collector, hs);
   registerStatus(collector, hs);
+  registerResumo(collector, hs);
   registerLeitura(collector, hs);
   if (!hs.config.readOnly) registerEscrita(collector, hs);
   registerGraphql(collector, hs);
@@ -20562,7 +20693,7 @@ function collectTools(hs) {
 }
 
 // src/version.ts
-var VERSION = "0.4.1";
+var VERSION = "0.5.0";
 
 // src/multi.ts
 function diagnosticoVariaveis() {
@@ -20602,6 +20733,29 @@ function resolverServidores(servers, pedido) {
     if (!out2.includes(achou[0])) out2.push(achou[0]);
   }
   return out2;
+}
+function somarNumeros(alvo, origem) {
+  for (const [k, v] of Object.entries(origem)) {
+    if (typeof v === "number") alvo[k] = Math.round(((alvo[k] ?? 0) + v) * 100) / 100;
+  }
+  return alvo;
+}
+function consolidar(resultados) {
+  const lista = Object.values(resultados);
+  if (lista.length < 2 || !lista.every((r) => r && Array.isArray(r.grupos) && r.totais)) return void 0;
+  const grupos = /* @__PURE__ */ new Map();
+  const totais = {};
+  for (const r of lista) {
+    for (const g of r.grupos) {
+      const { periodo, ...nums } = g;
+      grupos.set(periodo, somarNumeros(grupos.get(periodo) ?? {}, nums));
+    }
+    somarNumeros(totais, r.totais);
+  }
+  return {
+    grupos: [...grupos.entries()].sort(([a], [b]) => String(a).localeCompare(String(b))).map(([periodo, n]) => ({ periodo, ...n })),
+    totais
+  };
 }
 function parse3(text) {
   try {
@@ -20706,6 +20860,8 @@ function collectMultiTools(servers) {
             else if (r.dado?.encontrado === false) naoEncontrado.push(r.s.nome);
             else saida.resultados[r.s.nome] = r.dado;
           }
+          const consolidado = consolidar(saida.resultados);
+          if (consolidado) saida.consolidado_todas_bases = consolidado;
           if (naoEncontrado.length) saida.nao_encontrado_em = naoEncontrado;
           if (Object.keys(erros).length) saida.erros = erros;
           if (!Object.keys(saida.resultados).length && !naoEncontrado.length) {
@@ -20868,7 +21024,13 @@ async function main() {
   const shape = t.config.inputSchema ?? {};
   const args = external_exports.object(shape).parse(parseArgs(rest, shape));
   const r = await t.cb(args);
-  const text = r.content.map((c) => c.text).join("\n");
+  let text = r.content.map((c) => c.text).join("\n");
+  if (process.stdout.isTTY && !r.isError) {
+    try {
+      text = JSON.stringify(JSON.parse(text), null, 2);
+    } catch {
+    }
+  }
   if (r.isError) {
     err(text);
     process.exitCode = 1;

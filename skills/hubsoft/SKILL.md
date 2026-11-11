@@ -46,6 +46,7 @@ Alguns provedores têm mais de uma base Hubsoft (ex.: `base_pf`, `base_pj`, `bas
 | "Como está o cliente X?" (CPF/CNPJ ou código) | `situacao_cliente`: cadastro, serviços, PPPoE, ONU, RADIUS e resumo financeiro numa chamada |
 | Buscar por nome, login, telefone… | `buscar_cliente` (`busca`: `nome_razaosocial`, `login_radius`, `telefone`, `cpf_cnpj`, `codigo_cliente`, `id_cliente_servico`) |
 | "Quem está bloqueado/suspenso?", clientes por status | `servicos_por_status`. Filtra no servidor; **nunca** varra a base cliente a cliente |
+| Faturamento, recebimentos ou inadimplência de um período ("quanto recebemos em outubro?", "faturado x pago por mês no ano") | `resumo_financeiro`: soma no servidor e devolve só os totais por dia/mês/ano (`data=pagamento` ou `vencimento`). **Nunca** pagine faturas para somar |
 | Faturas de um cliente | `faturas_cliente` (resumo enxuto; `detalhado=true` só se pedirem itens/descontos/NF) |
 | Atendimentos / OS de um cliente | `atendimentos_cliente` / `ordens_servico_cliente` |
 | Relatórios por período, POPs, CPEs/ONUs, NF-e/NFS-e, sessões RADIUS, logins | GraphQL: `graphql_consultas` → `graphql_tipo` → `graphql` ([referências/graphql.md](references/graphql.md)) |
@@ -57,6 +58,7 @@ Alguns provedores têm mais de uma base Hubsoft (ex.: `base_pf`, `base_pj`, `bas
 - **Datas:** a API REST usa `dd/mm/aaaa`; o GraphQL usa `aaaa-mm-dd`. Nunca compare datas como texto sem normalizar.
 - **Listas GraphQL não filtram** por cliente nem por status (só paginação, ordenação e intervalo de datas). Para "faturas do cliente" use a REST (`faturas_cliente`). Para status de serviço use `servicos_por_status`.
 - **Status de serviço** (prefixos): veja [referências/status.md](references/status.md). "Bloqueado" costuma significar `suspenso_debito`; confirme se o usuário quer incluir `suspenso_parcialmente`, `suspenso_pedido_cliente` e `franquia_excedida`.
+- **Totais de período:** use `resumo_financeiro`. Com `data=pagamento`, as faturas pagas no período. Com `data=vencimento`, as que vencem no período, com pago, em aberto e vencido. Com várias bases, `consolidado_todas_bases` traz a soma geral.
 - **Tamanho:** peça só o necessário (`limit`, `first`, campos específicos no GraphQL). Respostas grandes são truncadas.
 
 ## Ações que alteram dados

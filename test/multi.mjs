@@ -15,6 +15,12 @@ function hubsoft(nome, { cpf, suspensos = 0, senha = "p" }) {
       return j.password === senha ? send({ token_type: "Bearer", access_token: nome, expires_in: 3600 }) : send({ status: "error", msg: "Os dados de autenticação enviados não são válidos" }, 401);
     }
     if (q.headers.authorization !== `Bearer ${nome}`) return send({ msg: "token de outra base!" }, 401);
+    if (q.url === "/graphql/v1" && b.includes("faturasByDataVencimento")) {
+      const n = { base_pf: 3, base_pj: 2, base_vtal: 1 }[nome];
+      const data = Array.from({ length: n }, (_, i) => ({ valor: 100, valor_pago: i === 0 ? 100 : null, ativo: true,
+        data_vencimento: "2026-10-10", data_pagamento: i === 0 ? "2026-10-09" : null }));
+      return send({ data: { r: { paginatorInfo: { lastPage: 1, total: n }, data } } });
+    }
     if (q.url === "/graphql/v1") {
       const j = JSON.parse(b);
       const achou = j.variables?.v === cpf;
@@ -95,6 +101,14 @@ assert.equal(r.err, true); assert.match(r.text, /não encontrado.*base_pf/);
 r = await call(c, "hubsoft_servicos_por_status", { status: ["suspenso_debito"], servidor: "base_pf,base_pj" });
 assert.equal(r.json.resultados.base_pf.total, 2); assert.equal(r.json.resultados.base_pj.total, 1);
 assert.equal(r.json.resultados.base_vtal, undefined);
+
+// resumo financeiro consolidado entre as bases
+r = await call(c, "hubsoft_resumo_financeiro", { de: "2026-10-01", ate: "2026-10-31", data: "vencimento" });
+assert.equal(r.json.resultados.base_pf.totais.faturas, 3);
+const cons = r.json.consolidado_todas_bases;
+assert.equal(cons.totais.faturas, 6); assert.equal(cons.totais.pagas, 3); assert.equal(cons.totais.em_aberto, 3);
+assert.equal(cons.totais.valor_vencido, 300); assert.deepEqual(cons.grupos.map(g => g.periodo), ["2026-10"]);
+
 await c.close();
 
 // escrita exige uma base; erro de login numa base não derruba as outras

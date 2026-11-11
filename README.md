@@ -10,6 +10,8 @@
   → cadastro, plano e status, PPPoE, ONU/VLAN, sessão RADIUS e faturas vencidas, numa resposta só
 "Quem está bloqueado por débito e quanto deve?"
   → lista filtrada no próprio Hubsoft, com dias suspenso e débito vencido de cada um
+"Quanto recebemos por mês este ano, em cada base e no total?"
+  → hubsoft_resumo_financeiro soma no servidor e devolve só os totais
 "Procure o CPF 123… em todas as bases" / "…só na minha base pessoa física"
   → consulta várias bases Hubsoft em paralelo, ou só a base citada
 ```
@@ -97,7 +99,7 @@ Com uma base só, nada muda: as respostas são as mesmas da v0.3.
 Nos exemplos abaixo, `HUBSOFT_MCP` é o comando do servidor:
 
 ```
-npx -y github:maxthetor/hubsoft_mcp#v0.4.0
+npx -y github:maxthetor/hubsoft_mcp#v0.5.0
 ```
 
 Ou clone o repositório e use `node /caminho/hubsoft_mcp/server/hubsoft-mcp.mjs`.
@@ -126,7 +128,7 @@ Baixe o `hubsoft-mcp.mcpb` da [última release](https://github.com/maxthetor/hub
   "mcp": {
     "hubsoft": {
       "type": "local",
-      "command": ["npx", "-y", "github:maxthetor/hubsoft_mcp#v0.4.0"],
+      "command": ["npx", "-y", "github:maxthetor/hubsoft_mcp#v0.5.0"],
       "enabled": true,
       "environment": {
         "HUBSOFT_URL": "https://api.seuprovedor.hubsoft.com.br",
@@ -151,7 +153,7 @@ Skill: copie `skills/hubsoft/` para `~/.config/opencode/skills/hubsoft/`. O Open
   "mcpServers": {
     "hubsoft": {
       "command": "npx",
-      "args": ["-y", "github:maxthetor/hubsoft_mcp#v0.4.0"],
+      "args": ["-y", "github:maxthetor/hubsoft_mcp#v0.5.0"],
       "env": {
         "HUBSOFT_URL": "https://api.seuprovedor.hubsoft.com.br",
         "HUBSOFT_CLIENT_ID": "...",
@@ -180,7 +182,7 @@ Skill: `.cursor/skills/hubsoft/` (Cursor) ou `~/.gemini/skills/hubsoft/` (Gemini
     "hubsoft": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "github:maxthetor/hubsoft_mcp#v0.4.0"],
+      "args": ["-y", "github:maxthetor/hubsoft_mcp#v0.5.0"],
       "env": {
         "HUBSOFT_URL": "https://api.seuprovedor.hubsoft.com.br",
         "HUBSOFT_CLIENT_ID": "...",
@@ -202,7 +204,7 @@ Skill: `.github/skills/hubsoft/`.
 ```toml
 [mcp_servers.hubsoft]
 command = "npx"
-args = ["-y", "github:maxthetor/hubsoft_mcp#v0.4.0"]
+args = ["-y", "github:maxthetor/hubsoft_mcp#v0.5.0"]
 env = { HUBSOFT_URL = "https://api.seuprovedor.hubsoft.com.br", HUBSOFT_CLIENT_ID = "...", HUBSOFT_CLIENT_SECRET = "...", HUBSOFT_USERNAME = "voce.api@provedor.com.br", HUBSOFT_PASSWORD = "..." }
 ```
 
@@ -227,6 +229,7 @@ node scripts/hubsoft.mjs graphql --query '{ pops(first: 10) { data { id_pop } } 
 |---|---|
 | `hubsoft_servidores` | Lista as bases configuradas; `testar=true` verifica o login em cada uma |
 | `hubsoft_situacao_cliente` | **Visão 360°:** cadastro, serviços, endereço, PPPoE, ONU/VLAN/OLT, RADIUS e resumo financeiro (vencidas com dias de atraso, PIX e linha digitável; próxima a vencer) |
+| `hubsoft_resumo_financeiro` | **Totais por período** (dia/mês/ano): faturas pagas ou vencidas, total pago, faturado, em aberto e vencido. Pagina e soma no servidor; com várias bases, consolida |
 | `hubsoft_servicos_por_status` | **Bloqueados/suspensos** ou qualquer status, filtrado no servidor, com débito vencido opcional |
 | `hubsoft_buscar_cliente` | Busca por CPF/CNPJ, código, nome, login, telefone… |
 | `hubsoft_faturas_cliente` | Faturas, em resumo enxuto ou com `detalhado=true` |
