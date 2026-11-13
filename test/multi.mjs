@@ -75,8 +75,9 @@ assert.ok(!r.text.includes('"s"') && !r.text.includes("certa"), "sem segredos na
 
 r = await call(c, "hubsoft_servidores", { diagnostico: true });
 assert.match(r.json.versao, /^\d+\.\d+\.\d+$/);
-assert.equal(r.json.variaveis.HUBSOFT_2_URL, "preenchida");
-assert.match(r.json.variaveis.HUBSOFT_3_URL, /não substituída/);
+assert.ok(r.json.variaveis.includes("HUBSOFT_2_URL: preenchida"));
+assert.ok(r.json.variaveis.includes("HUBSOFT_PASSWORD: preenchida"), "estado visível também para senhas");
+assert.ok(r.json.variaveis.some(v => /^HUBSOFT_3_URL: não substituída/.test(v)));
 assert.ok(!r.text.includes("127.0.0.1") || r.text.includes("endereco"), "diagnóstico não expõe valores");
 assert.ok(!JSON.stringify(r.json.variaveis).includes("certa"));
 

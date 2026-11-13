@@ -13,6 +13,8 @@ export const INSTRUCTIONS =
   "hubsoft_servicos_por_status (filtra no servidor; não varra a base). " +
   "Para totais de um período (faturamento, recebimentos, inadimplência por mês), use " +
   "hubsoft_resumo_financeiro, que pagina e soma no servidor; nunca pagine faturas para somar. " +
+  "Para clientes com cadastro ativo e sem serviço ativo, use hubsoft_clientes_ativos_sem_servico_ativo " +
+  "(varre a base no servidor); nunca pagine clientes manualmente. " +
   "Para buscas por nome, login ou outros campos use hubsoft_buscar_cliente. " +
   "Para relatórios por período, POPs, CPEs/ONUs, notas fiscais e sessões RADIUS, use as " +
   "ferramentas GraphQL (hubsoft_graphql_consultas → hubsoft_graphql_tipo → hubsoft_graphql). " +

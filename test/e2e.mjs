@@ -16,6 +16,17 @@ const faturaReal = (id, venc, status) => ({
   cliente: { codigo_cliente: 77, servico: { id_cliente_servico: 1, endereco_cadastral: endereco, endereco_instalacao: endereco, endereco_fiscal: endereco, endereco_cobranca: endereco } },
 });
 const calls = [];
+let paginaInstavelUsada = false;
+const CLIENTES = Array.from({ length: 1203 }, (_, k) => { const i = k + 1;
+  const sv = (st) => ({ id_cliente_servico: 100000 + i, nome: "PLANO", status_prefixo: st, senha: "pppoe!", data_cancelamento: st === "cancelado" ? "2025-03-01 10:00:00" : null });
+  let servicos;
+  if (i % 10 === 0) servicos = [sv("cancelado")];
+  else if (i % 7 === 0) servicos = [sv("cancelado"), sv("inativo")];
+  else if (i % 11 === 0) servicos = [];
+  else if (i % 13 === 0) servicos = [sv("suspenso_debito")];
+  else servicos = [sv("servico_habilitado")];
+  return { id_cliente: i, codigo_cliente: i, nome_razaosocial: "Cliente " + i, cpf_cnpj: String(10000000000 + i), rg: "SECRETO", ativo: i % 10 !== 0, data_cadastro: "2020-01-15 00:00:00", servicos };
+});
 const TODAS = [
   ...Array.from({ length: 2500 }, (_, i) => ({ id_fatura: String(1000 + i), valor: 100 + (i % 7), valor_pago: 99.5 + (i % 7), ativo: i % 50 !== 0,
     data_vencimento: "2026-10-10", data_pagamento: i < 1500 ? `2026-10-${String(1 + (i % 28)).padStart(2, "0")}` : `2026-11-${String(1 + (i % 28)).padStart(2, "0")}` })),
@@ -42,6 +53,13 @@ const srv = http.createServer((q, r) => { let b = ""; q.on("data", d => b += d);
     return send({ data: { cliente: { codigo_cliente: 77, nome_razaosocial: "Fulano", servicos: [
       { id_cliente_servico: 1, data_cancelamento: null, cliente_servico_autenticacao: { login: "fulano", password: "segredo123", status_conexao_radius: { status: "online", ipv4: "100.64.0.9" } } },
       { id_cliente_servico: 2, data_cancelamento: "2025-01-01" } ] } } }); }
+  if (q.url.startsWith("/api/v1/integracao/cliente/todos") && !q.url.includes("servico_status")) {
+    const u = new URL(q.url, "http://x"); const pg = Number(u.searchParams.get("pagina")); const n = Number(u.searchParams.get("itens_por_pagina"));
+    if (n > 500) return send({ status: "error", msg: "O campo itens por pagina não deverá conter um valor superior a 500." }, 422);
+    // instável: na 1ª vez que a página 1 é pedida, a API devolve de novo os clientes da página 0
+    let ini = pg * n; if (pg === 1 && !paginaInstavelUsada) { paginaInstavelUsada = true; ini = 0; }
+    return send({ status: "success", paginacao: { primeira_pagina: 0, ultima_pagina: Math.ceil(CLIENTES.length / n) - 1, pagina_atual: pg, total_registros: CLIENTES.length }, clientes: CLIENTES.slice(ini, ini + n) });
+  }
   if (q.url.startsWith("/api/v1/integracao/cliente/todos")) {
     const u = new URL(q.url, "http://x"); const st = u.searchParams.get("servico_status"); const pg = Number(u.searchParams.get("pagina"));
     if (st !== "suspenso_debito") return send({ status: "success", paginacao: { ultima_pagina: 0 }, clientes: [] });
@@ -122,6 +140,19 @@ const rd = JSON.parse((await c.callTool({ name: "hubsoft_resumo_financeiro", arg
 assert.equal(rd.repetidas_descartadas, 1); assert.equal(rd.faturas_lidas, 1499); assert.equal(rd.completo, false); assert.match(rd.aviso, /1499 faturas únicas/);
 const rerr = await c.callTool({ name: "hubsoft_resumo_financeiro", arguments: { de: "2026-11-30", ate: "2026-10-01" } });
 assert.equal(rerr.isError, true);
+
+const esperaSem = (ativoFn) => CLIENTES.filter(c => c.ativo && !c.servicos.some(sv => ativoFn(sv.status_prefixo)));
+const hg = JSON.parse((await c.callTool({ name: "hubsoft_clientes_ativos_sem_servico_ativo", arguments: {} })).content[0].text);
+const espV = esperaSem(st => st !== "cancelado" && st !== "inativo");
+assert.equal(hg.clientes_na_base, 1203); assert.equal(hg.clientes_lidos, 1203); assert.equal(hg.completo, true, "2ª passada completou");
+assert.ok(hg.repetidos_descartados >= 500, "página repetida descartada");
+assert.equal(hg.total_sem_servico_ativo, espV.length);
+assert.equal(hg.clientes[0].cpf_cnpj, espV[0].cpf_cnpj);
+assert.ok(hg.por_situacao.sem_servicos > 0 && hg.por_situacao["cancelado+inativo"] > 0);
+assert.ok(!JSON.stringify(hg).includes("SECRETO") && !JSON.stringify(hg).includes("pppoe!"), "lista enxuta, sem RG nem senha");
+const hh = JSON.parse((await c.callTool({ name: "hubsoft_clientes_ativos_sem_servico_ativo", arguments: { criterio: "habilitado", limite: 5 } })).content[0].text);
+assert.equal(hh.total_sem_servico_ativo, esperaSem(st => st === "servico_habilitado").length);
+assert.ok(hh.por_situacao.suspenso_debito > 0); assert.equal(hh.clientes.length, 5); assert.equal(hh.lista_truncada_em, 5);
 
 const g = await c.callTool({ name: "hubsoft_graphql", arguments: { query: "mutation { x }" } });
 assert.equal(g.isError, true, "mutation deve ser bloqueada");

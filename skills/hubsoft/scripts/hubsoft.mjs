@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// hubsoft-mcp 0.5.1 — https://github.com/maxthetor/hubsoft_mcp (MIT)
+// hubsoft-mcp 0.6.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
 // Arquivo gerado por scripts/bundle.mjs a partir de src/. Não edite.
 import { createRequire as __cr } from "node:module"; const require = __cr(import.meta.url);
 var __defProp = Object.defineProperty;
@@ -20455,6 +20455,105 @@ function registerResumo(server, hs) {
   );
 }
 
+// src/tools/higiene.ts
+var POR_PAGINA2 = 500;
+var PARALELO2 = 4;
+var MAX_PAGINAS2 = 400;
+var ENCERRADOS = /* @__PURE__ */ new Set(["cancelado", "inativo"]);
+function registerHigiene(server, hs) {
+  const max = hs.config.maxResponseChars;
+  server.registerTool(
+    "hubsoft_clientes_ativos_sem_servico_ativo",
+    {
+      title: "Clientes ativos sem servi\xE7o ativo",
+      description: "Varre TODOS os clientes da base no pr\xF3prio servidor (REST cliente/todos, 500 por p\xE1gina) e devolve s\xF3 os clientes com cadastro ATIVO que n\xE3o t\xEAm nenhum servi\xE7o ativo \u2014 para higiene de cadastro (inativar cadastros) ou recupera\xE7\xE3o de ex-clientes. Nunca pagine clientes manualmente para isso. criterio='vigente' (padr\xE3o): servi\xE7o ativo = qualquer status exceto cancelado e inativo (suspensos e instala\xE7\xF5es pendentes contam como ativos). criterio='habilitado': s\xF3 'Servi\xE7o Habilitado' conta como ativo (inclui suspensos na lista). Devolve c\xF3digo, nome, CPF/CNPJ, data de cadastro e o status de cada servi\xE7o, al\xE9m de contagens por situa\xE7\xE3o.",
+      inputSchema: {
+        criterio: external_exports.enum(["vigente", "habilitado"]).optional().describe("O que conta como servi\xE7o ativo. Padr\xE3o: vigente."),
+        limite: external_exports.number().int().min(0).max(2e4).optional().describe("M\xE1ximo de clientes na lista (as contagens consideram todos). Padr\xE3o: 1000; 0 = s\xF3 contagens.")
+      },
+      annotations: { readOnlyHint: true, openWorldHint: true }
+    },
+    async ({ criterio, limite }) => run(max, async () => {
+      const modo = criterio ?? "vigente";
+      const lim = limite ?? 1e3;
+      const ativo = (st) => modo === "habilitado" ? st === "servico_habilitado" : !ENCERRADOS.has(st);
+      const pagina = (n) => hs.get(`${API}/cliente/todos`, { itens_por_pagina: POR_PAGINA2, pagina: n });
+      const clientes = /* @__PURE__ */ new Map();
+      let total = 0;
+      let paginas = 0;
+      let repetidos = 0;
+      const varrer = async () => {
+        const primeira = await pagina(0);
+        paginas++;
+        const ultima2 = Math.min(Number(primeira?.paginacao?.ultima_pagina ?? 0), MAX_PAGINAS2 - 1);
+        total = Number(primeira?.paginacao?.total_registros ?? 0);
+        const lotes = [primeira?.clientes ?? []];
+        for (let p = 1; p <= ultima2; p += PARALELO2) {
+          const nums = Array.from({ length: Math.min(PARALELO2, ultima2 - p + 1) }, (_, i) => p + i);
+          const res = await Promise.all(nums.map(pagina));
+          paginas += nums.length;
+          for (const r of res) lotes.push(r?.clientes ?? []);
+        }
+        for (const lote of lotes) {
+          for (const c of lote) {
+            const id = String(c?.id_cliente ?? c?.codigo_cliente);
+            if (clientes.has(id)) repetidos++;
+            else clientes.set(id, c);
+          }
+        }
+        return ultima2;
+      };
+      let ultima = await varrer();
+      let passadas = 1;
+      if (clientes.size < total) {
+        ultima = await varrer();
+        passadas++;
+      }
+      const truncado = ultima >= MAX_PAGINAS2 - 1 && total > MAX_PAGINAS2 * POR_PAGINA2;
+      const resultado = [];
+      const porSituacao = {};
+      let ativosCadastro = 0;
+      for (const c of clientes.values()) {
+        if (c?.ativo === false) continue;
+        ativosCadastro++;
+        const servicos = c?.servicos ?? [];
+        if (servicos.some((s) => ativo(String(s?.status_prefixo ?? "")))) continue;
+        const sts = [...new Set(servicos.map((s) => String(s?.status_prefixo ?? "?")))].sort();
+        const situacao = sts.length ? sts.join("+") : "sem_servicos";
+        porSituacao[situacao] = (porSituacao[situacao] ?? 0) + 1;
+        resultado.push({
+          codigo_cliente: c.codigo_cliente,
+          nome: c.nome_razaosocial,
+          cpf_cnpj: c.cpf_cnpj,
+          data_cadastro: isoDate(c.data_cadastro) ?? c.data_cadastro,
+          servicos: servicos.map((s) => ({
+            id_cliente_servico: s.id_cliente_servico,
+            plano: s.nome,
+            status: s.status_prefixo,
+            ...s.data_cancelamento ? { cancelado_em: isoDate(s.data_cancelamento) ?? s.data_cancelamento } : {}
+          }))
+        });
+      }
+      resultado.sort((a, b) => Number(a.codigo_cliente) - Number(b.codigo_cliente));
+      const completo = clientes.size >= total && !truncado;
+      return {
+        criterio: modo,
+        clientes_na_base: total,
+        clientes_lidos: clientes.size,
+        clientes_ativos_no_cadastro: ativosCadastro,
+        total_sem_servico_ativo: resultado.length,
+        por_situacao: porSituacao,
+        completo,
+        ...completo ? {} : { aviso: `Lidos ${clientes.size} de ${total} clientes ap\xF3s ${passadas} passada(s); a lista pode estar incompleta.` },
+        paginas_consultadas: paginas,
+        repetidos_descartados: repetidos,
+        ...resultado.length > lim ? { lista_truncada_em: lim } : {},
+        clientes: resultado.slice(0, lim)
+      };
+    })
+  );
+}
+
 // src/tools/leitura.ts
 var READ = { readOnlyHint: true, openWorldHint: true };
 var busca = external_exports.string().describe(
@@ -20729,6 +20828,7 @@ function collectTools(hs) {
   registerSituacao(collector, hs);
   registerStatus(collector, hs);
   registerResumo(collector, hs);
+  registerHigiene(collector, hs);
   registerLeitura(collector, hs);
   if (!hs.config.readOnly) registerEscrita(collector, hs);
   registerGraphql(collector, hs);
@@ -20736,15 +20836,15 @@ function collectTools(hs) {
 }
 
 // src/version.ts
-var VERSION = "0.5.1";
+var VERSION = "0.6.0";
 
 // src/multi.ts
 function diagnosticoVariaveis() {
-  const out2 = {};
+  const out2 = [];
   for (const [k, v] of Object.entries(process.env).sort()) {
     if (!k.startsWith("HUBSOFT_")) continue;
     const t = (v ?? "").trim();
-    out2[k] = !t ? "vazia" : /^\$\{[^}]+\}$/.test(t) ? `n\xE3o substitu\xEDda (${t})` : "preenchida";
+    out2.push(`${k}: ${!t ? "vazia" : /^\$\{[^}]+\}$/.test(t) ? `n\xE3o substitu\xEDda (${t})` : "preenchida"}`);
   }
   return out2;
 }

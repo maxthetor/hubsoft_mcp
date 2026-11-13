@@ -47,6 +47,7 @@ Alguns provedores têm mais de uma base Hubsoft (ex.: `base_pf`, `base_pj`, `bas
 | Buscar por nome, login, telefone… | `buscar_cliente` (`busca`: `nome_razaosocial`, `login_radius`, `telefone`, `cpf_cnpj`, `codigo_cliente`, `id_cliente_servico`) |
 | "Quem está bloqueado/suspenso?", clientes por status | `servicos_por_status`. Filtra no servidor; **nunca** varra a base cliente a cliente |
 | Faturamento, recebimentos ou inadimplência de um período ("quanto recebemos em outubro?", "faturado x pago por mês no ano") | `resumo_financeiro`: soma no servidor e devolve só os totais por dia/mês/ano (`data=pagamento` ou `vencimento`). **Nunca** pagine faturas para somar |
+| "Clientes ativos sem serviço ativo", cadastros para inativar, ex-clientes para recuperar | `clientes_ativos_sem_servico_ativo`: varre a base no servidor e devolve só a lista final. `criterio=vigente` (padrão) ou `habilitado` |
 | Faturas de um cliente | `faturas_cliente` (resumo enxuto; `detalhado=true` só se pedirem itens/descontos/NF) |
 | Atendimentos / OS de um cliente | `atendimentos_cliente` / `ordens_servico_cliente` |
 | Relatórios por período, POPs, CPEs/ONUs, NF-e/NFS-e, sessões RADIUS, logins | GraphQL: `graphql_consultas` → `graphql_tipo` → `graphql` ([referências/graphql.md](references/graphql.md)) |

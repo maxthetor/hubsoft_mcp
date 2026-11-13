@@ -7,12 +7,12 @@ import { fail, ok, run } from "./util.js";
 import { VERSION } from "./version.js";
 
 /** Estado das variáveis HUBSOFT_* recebidas (só nomes e estado, nunca valores). */
-export function diagnosticoVariaveis() {
-  const out: Record<string, string> = {};
+export function diagnosticoVariaveis(): string[] {
+  const out: string[] = [];
   for (const [k, v] of Object.entries(process.env).sort()) {
     if (!k.startsWith("HUBSOFT_")) continue;
     const t = (v ?? "").trim();
-    out[k] = !t ? "vazia" : /^\$\{[^}]+\}$/.test(t) ? `não substituída (${t})` : "preenchida";
+    out.push(`${k}: ${!t ? "vazia" : /^\$\{[^}]+\}$/.test(t) ? `não substituída (${t})` : "preenchida"}`);
   }
   return out;
 }

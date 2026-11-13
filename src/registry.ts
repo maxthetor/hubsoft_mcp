@@ -3,6 +3,7 @@ import type { HubsoftClient } from "./client.js";
 import { registerSituacao } from "./tools/situacao.js";
 import { registerStatus } from "./tools/status.js";
 import { registerResumo } from "./tools/resumo.js";
+import { registerHigiene } from "./tools/higiene.js";
 import { registerLeitura } from "./tools/leitura.js";
 import { registerEscrita } from "./tools/escrita.js";
 import { registerGraphql } from "./tools/graphql.js";
@@ -38,6 +39,7 @@ export function collectTools(hs: HubsoftClient): ToolDef[] {
   registerSituacao(collector, hs);
   registerStatus(collector, hs);
   registerResumo(collector, hs);
+  registerHigiene(collector, hs);
   registerLeitura(collector, hs);
   if (!hs.config.readOnly) registerEscrita(collector, hs);
   registerGraphql(collector, hs);
