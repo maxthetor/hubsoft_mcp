@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// hubsoft-mcp 0.6.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
+// hubsoft-mcp 0.7.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
 // Arquivo gerado por scripts/bundle.mjs a partir de src/. Não edite.
 import { createRequire as __cr } from "node:module"; const require = __cr(import.meta.url);
 var __create = Object.create;
@@ -36685,9 +36685,20 @@ function expandEnv(v) {
   if (typeof v !== "string") return v === void 0 || v === null ? void 0 : String(v);
   return v.replace(/\{env:([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, n) => process.env[n] ?? "").trim() || void 0;
 }
+function escritaGlobal() {
+  if (env("HUBSOFT_PERMITIR_ESCRITA") !== void 0) return bool("HUBSOFT_PERMITIR_ESCRITA", false);
+  return !bool("HUBSOFT_READ_ONLY", true);
+}
+function simNao(v) {
+  if (v === void 0) return void 0;
+  return ["1", "true", "sim", "yes", "on"].includes(v.trim().toLowerCase());
+}
+var AUDITORIA_PADRAO = join(homedir(), ".config", "hubsoft", "auditoria.jsonl");
 function globais() {
+  const aud = env("HUBSOFT_AUDITORIA");
   return {
-    readOnly: bool("HUBSOFT_READ_ONLY", true),
+    readOnly: !escritaGlobal(),
+    auditoria: aud === void 0 ? AUDITORIA_PADRAO : aud.toLowerCase() === "off" ? "" : aud,
     maxResponseChars: Number(env("HUBSOFT_MAX_RESPONSE_CHARS") ?? 6e4),
     exposeSecrets: bool("HUBSOFT_EXPOR_SENHAS", false)
   };
@@ -36712,7 +36723,8 @@ function lerArquivo(caminho) {
     client_secret: expandEnv(s.client_secret),
     usuario: expandEnv(s.usuario ?? s.username),
     senha: expandEnv(s.senha ?? s.password),
-    graphql_path: expandEnv(s.graphql_path)
+    graphql_path: expandEnv(s.graphql_path),
+    permitir_escrita: s.permitir_escrita === void 0 ? void 0 : String(s.permitir_escrita)
   }));
 }
 function lerSlot(prefixo, origem) {
@@ -36727,7 +36739,9 @@ function lerSlot(prefixo, origem) {
     client_secret: env(`${prefixo}CLIENT_SECRET`),
     usuario: env(`${prefixo}USERNAME`),
     senha: env(`${prefixo}PASSWORD`),
-    graphql_path: env(`${prefixo}GRAPHQL_PATH`)
+    graphql_path: env(`${prefixo}GRAPHQL_PATH`),
+    // HUBSOFT_PERMITIR_ESCRITA do servidor 1 é a mesma variável global; as numeradas valem por base.
+    permitir_escrita: prefixo === "HUBSOFT_" ? void 0 : env(`${prefixo}PERMITIR_ESCRITA`)
   };
 }
 function loadServers() {
@@ -36771,7 +36785,9 @@ function loadServers() {
       username: b.usuario,
       password: b.senha,
       graphqlPath: graphqlPath(b.graphql_path ?? env("HUBSOFT_GRAPHQL_PATH")),
-      ...g
+      ...g,
+      // permissão por base sobrepõe a global
+      readOnly: !(simNao(b.permitir_escrita) ?? !g.readOnly)
     };
   });
 }
@@ -36868,6 +36884,41 @@ var HubsoftClient = class {
       throw new HubsoftError(`Hubsoft respondeu HTTP ${res.status}: ${msg}`, res.status, body);
     }
     return body;
+  }
+  /**
+   * Requisição que NUNCA lança erro por status HTTP: devolve status e corpo na íntegra.
+   * Usada pelas ferramentas de escrita, que precisam mostrar a resposta do Hubsoft sem filtro.
+   * - 401: renova o token UMA vez e reenvia (único reenvio permitido, inclusive em POST);
+   * - 429: não repete; devolve o erro com retry_after;
+   * - demais códigos: sem nova tentativa.
+   */
+  async raw(method, path, opts = {}) {
+    const url2 = new URL(this.cfg.baseUrl + (path.startsWith("/") ? path : `/${path}`));
+    for (const [k, v] of Object.entries(opts.query ?? {})) {
+      if (v !== void 0 && v !== null && v !== "") url2.searchParams.set(k, String(v));
+    }
+    const enviar = async (force) => fetch(url2, {
+      method,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: await this.getToken(force)
+      },
+      body: opts.body === void 0 ? void 0 : JSON.stringify(opts.body)
+    });
+    let res = await enviar(false);
+    let tokenRenovado = false;
+    if (res.status === 401) {
+      tokenRenovado = true;
+      res = await enviar(true);
+    }
+    const body = await safeJson(res);
+    let retryAfter;
+    if (res.status === 429) {
+      const h = Number(res.headers.get("retry-after"));
+      retryAfter = Number(body?.retry_after ?? (Number.isFinite(h) ? h : void 0)) || void 0;
+    }
+    return { status: res.status, ok: res.ok, url: url2.toString(), body, retryAfter, ...tokenRenovado ? { tokenRenovado } : {} };
   }
   get(path, query) {
     return this.request("GET", path, { query });
@@ -37460,6 +37511,570 @@ function registerHigiene(server, hs) {
   );
 }
 
+// src/tools/cpe.ts
+import { appendFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+var RELACOES = "interface,equipamento_conexao,interface_roteamento,equipamento_roteamento,cpes";
+var SEGREDO = /password|senha|secret|token/i;
+var normPhy = (s) => String(s ?? "").replace(/[^0-9a-z]/gi, "").toUpperCase();
+var mascara = (v) => v === null || v === void 0 || v === "" ? v : "***";
+function compacto(o) {
+  if (o === null || o === void 0) return o ?? null;
+  if (Array.isArray(o)) return o.map(compacto);
+  if (typeof o !== "object") return o;
+  const out = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (v !== null && typeof v === "object") continue;
+    out[k] = SEGREDO.test(k) ? mascara(v) : v;
+  }
+  return out;
+}
+function idsServico(o, acc = /* @__PURE__ */ new Set()) {
+  if (Array.isArray(o)) o.forEach((x) => idsServico(x, acc));
+  else if (o && typeof o === "object") {
+    for (const [k, v] of Object.entries(o)) {
+      if (k === "id_cliente_servico" && v !== null && v !== "") acc.add(Number(v));
+      else if (v && typeof v === "object") idsServico(v, acc);
+    }
+  }
+  return acc;
+}
+function snapshotServico(sv) {
+  const out = {
+    id_cliente_servico: sv.id_cliente_servico,
+    status: sv.status ?? sv.servico_status?.descricao,
+    status_prefixo: sv.status_prefixo ?? sv.servico_status?.prefixo,
+    login: sv.login,
+    mac_addr: sv.mac_addr,
+    phy_addr: sv.phy_addr,
+    id_interface_conexao: sv.id_interface_conexao ?? sv.interface?.id_interface_conexao ?? sv.interface_conexao?.id_interface_conexao ?? null
+  };
+  for (const rel of ["interface", "interface_conexao", "equipamento_conexao", "interface_roteamento", "equipamento_roteamento", "cpes"]) {
+    if (rel in sv) out[rel] = compacto(sv[rel]);
+  }
+  return out;
+}
+function resumoCpe(c) {
+  return {
+    id_cpe: c.id_cpe,
+    phy_addr: c.phy_addr,
+    data_ultima_atualizacao: c.data_ultima_atualizacao ?? null,
+    servicos_vinculados: [...idsServico(c)],
+    ...Object.fromEntries(
+      Object.entries(c).filter(([k, v]) => /servic|cliente|assinante/i.test(k) && v && typeof v === "object").map(([k, v]) => [k, compacto(v)])
+    )
+  };
+}
+function primeiraLista(body) {
+  if (Array.isArray(body)) return body;
+  for (const k of ["cpes", "dados", "data", "registros"]) if (Array.isArray(body?.[k])) return body[k];
+  for (const v of Object.values(body ?? {})) if (Array.isArray(v)) return v;
+  return [];
+}
+async function lerServico(hs, id) {
+  const r = await hs.raw("GET", `${API}/cliente`, {
+    query: { busca: "id_cliente_servico", termo_busca: id, relacoes: RELACOES }
+  });
+  if (!r.ok) return { erro: { http_status: r.status, resposta: r.body } };
+  for (const c of r.body?.clientes ?? []) {
+    const sv = (c.servicos ?? []).find((s) => Number(s.id_cliente_servico) === Number(id));
+    if (sv) return { cliente: { codigo_cliente: c.codigo_cliente, nome: c.nome_razaosocial }, servico: snapshotServico(sv) };
+  }
+  return { erro: { msg: `Servi\xE7o ${id} n\xE3o encontrado nesta base.` } };
+}
+async function lerCpe(hs, phy) {
+  const r = await hs.raw("GET", `${API}/rede/cpe/todos`, {
+    query: { pagina: 0, itens_por_pagina: 20, busca: "phy_addr", termo_busca: phy, somente_assinante_associado: "nao" }
+  });
+  if (!r.ok) return { erro: { http_status: r.status, resposta: r.body } };
+  const alvo = normPhy(phy);
+  return { encontradas: primeiraLista(r.body).filter((c) => normPhy(c?.phy_addr) === alvo).map(resumoCpe) };
+}
+function achatar(o, prefixo = "", out = {}) {
+  if (o && typeof o === "object") {
+    const entradas = Array.isArray(o) ? o.map((v, i) => [String(i), v]) : Object.entries(o);
+    if (!entradas.length) out[prefixo] = JSON.stringify(o);
+    for (const [k, v] of entradas) achatar(v, prefixo ? `${prefixo}.${k}` : k, out);
+  } else out[prefixo] = JSON.stringify(o ?? null);
+  return out;
+}
+function diff(antes, depois) {
+  const a = achatar(antes);
+  const b = achatar(depois);
+  return [.../* @__PURE__ */ new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => a[k] !== b[k]).sort().map((campo) => ({
+    campo,
+    antes: a[campo] === void 0 ? void 0 : JSON.parse(a[campo]),
+    depois: b[campo] === void 0 ? void 0 : JSON.parse(b[campo])
+  }));
+}
+function semSegredos(o) {
+  if (Array.isArray(o)) return o.map(semSegredos);
+  if (!o || typeof o !== "object") return o;
+  const senhaWifi = typeof o.prefixo === "string" && /password/i.test(o.prefixo);
+  return Object.fromEntries(
+    Object.entries(o).map(([k, v]) => {
+      if (SEGREDO.test(k) && (v === null || typeof v !== "object")) return [k, mascara(v)];
+      if (senhaWifi && ["valor", "atual", "novo"].includes(k)) return [k, mascara(v)];
+      return [k, semSegredos(v)];
+    })
+  );
+}
+function auditar(hs, registro) {
+  const arq = hs.config.auditoria;
+  if (!arq) return;
+  try {
+    mkdirSync(dirname(arq), { recursive: true });
+    appendFileSync(arq, JSON.stringify(semSegredos({ data_hora: (/* @__PURE__ */ new Date()).toISOString(), base: hs.config.nome, ...registro })) + "\n", { mode: 384 });
+  } catch (e) {
+    registro.aviso_auditoria = `Falha ao gravar auditoria em ${arq}: ${e.message}`;
+  }
+}
+function responder(hs, data, erro = false) {
+  const r = ok(data, hs.config.maxResponseChars);
+  return erro ? { ...r, isError: true } : r;
+}
+async function lerEstado(hs, alvo) {
+  const estado = {};
+  if (alvo.servico) estado.servico = await lerServico(hs, alvo.servico);
+  if (alvo.phy) estado.cpe = await lerCpe(hs, alvo.phy);
+  return estado;
+}
+async function escrever(hs, p) {
+  const antes = p.estadoAntes ?? await lerEstado(hs, p.alvo);
+  const requisicao = { metodo: "POST", url: hs.config.baseUrl + p.path, corpo: p.corpoExibicao ?? p.corpo };
+  if (!p.confirmar || p.bloqueio) {
+    return responder(
+      hs,
+      {
+        modo: "simulacao",
+        nada_foi_enviado: true,
+        ...p.bloqueio ? { bloqueado: p.bloqueio } : {},
+        requisicao_que_seria_enviada: requisicao,
+        estado_atual: antes,
+        efeito_esperado: p.efeito,
+        avisos: p.avisos,
+        ...p.extra,
+        ...p.bloqueio ? {} : { para_executar: "Confirme com o usu\xE1rio e repita a chamada com confirmar=true." }
+      },
+      Boolean(p.bloqueio && p.confirmar)
+    );
+  }
+  const r = await hs.raw("POST", p.path, { body: p.corpo });
+  const sucesso = r.ok && r.body?.status !== "error";
+  const depois = await lerEstado(hs, p.alvoDepois ? p.alvoDepois(antes) : p.alvo);
+  const mudancas = diff(antes, depois);
+  const resultado = {
+    http_status: r.status,
+    sucesso,
+    resposta: r.body,
+    ...r.status === 429 ? { retry_after: r.retryAfter, observacao: "Limite de requisi\xE7\xF5es: n\xE3o foi repetido. Aguarde retry_after segundos." } : {},
+    ...r.tokenRenovado ? { token_renovado: true } : {}
+  };
+  const registro = {
+    ferramenta: p.ferramenta,
+    metodo: "POST",
+    url: requisicao.url,
+    corpo: p.corpoExibicao ?? p.corpo,
+    http_status: r.status,
+    resposta: r.body,
+    diff: mudancas
+  };
+  auditar(hs, registro);
+  return responder(
+    hs,
+    {
+      modo: "execucao",
+      requisicao_enviada: requisicao,
+      resultado,
+      estado_antes: antes,
+      estado_depois: depois,
+      diff: mudancas,
+      ...registro.aviso_auditoria ? { aviso_auditoria: registro.aviso_auditoria } : {}
+    },
+    !sucesso
+  );
+}
+var confirmar = external_exports.boolean().optional().describe("false (padr\xE3o) = s\xF3 simula, nada \xE9 enviado. true = executa.");
+var mostrarSenhas = external_exports.boolean().optional().describe("Mostra senhas de Wi-Fi (padr\xE3o: mascaradas).");
+var phySchema = external_exports.string().trim().min(5, "phy_addr: m\xEDnimo 5 caracteres").regex(/^\S+$/, "phy_addr: sem espa\xE7os");
+var ESCRITA = { readOnlyHint: false, openWorldHint: true };
+function parametrosVisiveis(params, mostrar) {
+  return (params ?? []).map((x) => ({
+    descricao: x.descricao,
+    prefixo: x.prefixo,
+    parametro: x.parametro,
+    valor: !mostrar && /password/i.test(String(x.prefixo ?? "")) ? mascara(x.valor) : x.valor
+  }));
+}
+async function iniciarGerenciamento(hs, q) {
+  return hs.raw("GET", `${API}/rede/cpe/iniciar_gerenciamento`, { query: q });
+}
+function validarValor(prefixo, atual, novo2) {
+  const a = String(atual ?? "");
+  if (/password/i.test(prefixo) && (novo2.length < 8 || novo2.length > 63)) return `${prefixo}: senha Wi-Fi precisa ter de 8 a 63 caracteres`;
+  if (/ssid/i.test(prefixo) && !/password/i.test(prefixo) && (novo2.length < 1 || novo2.length > 32)) return `${prefixo}: SSID precisa ter de 1 a 32 caracteres`;
+  if (/^(true|false)$/i.test(a) && !/^(true|false)$/i.test(novo2)) return `${prefixo}: valor atual \xE9 booleano (${a}); use true ou false`;
+  if (/^-?\d+$/.test(a) && !/^-?\d+$/.test(novo2)) return `${prefixo}: valor atual \xE9 num\xE9rico (${a}); envie um n\xFAmero`;
+  return void 0;
+}
+function registerCpe(server, hs) {
+  server.registerTool(
+    "hubsoft_cpe_iniciar_gerenciamento",
+    {
+      title: "CPE: ler par\xE2metros gerenci\xE1veis (ACS)",
+      description: "Abre o gerenciamento da CPE pelo gerenciador do Hubsoft (ACS) e lista os par\xE2metros edit\xE1veis (descricao, prefixo, parametro, valor), ex.: wifi_ssid, wifi_password, wifi_ssid_5ghz, wifi_password_5ghz. Informe EXATAMENTE um entre phy_addr e id_cpe. Senhas de Wi-Fi v\xEAm mascaradas, salvo mostrar_senhas=true. Exige uma \xFAnica base em `servidor`.",
+      inputSchema: {
+        phy_addr: phySchema.optional(),
+        id_cpe: external_exports.number().int().positive().optional(),
+        mostrar_senhas: mostrarSenhas
+      },
+      annotations: { readOnlyHint: true, openWorldHint: true }
+    },
+    async ({ phy_addr, id_cpe, mostrar_senhas }) => {
+      try {
+        if (Boolean(phy_addr) === Boolean(id_cpe)) throw new Error("Informe exatamente um entre phy_addr e id_cpe.");
+        const r = await iniciarGerenciamento(hs, phy_addr ? { phy_addr } : { id_cpe });
+        if (!r.ok || r.body?.status === "error") {
+          return responder(hs, { http_status: r.status, resposta: r.body, ...r.retryAfter ? { retry_after: r.retryAfter } : {} }, true);
+        }
+        const cpe = r.body?.cpe ?? {};
+        return responder(hs, {
+          http_status: r.status,
+          cpe: { id_cpe: cpe.id_cpe, phy_addr: cpe.phy_addr, parametros: parametrosVisiveis(cpe.parametros, mostrar_senhas) },
+          ...mostrar_senhas ? {} : { observacao: "Senhas de Wi-Fi mascaradas; use mostrar_senhas=true para v\xEA-las." }
+        });
+      } catch (e) {
+        return fail(e);
+      }
+    }
+  );
+  if (hs.config.readOnly) return;
+  server.registerTool(
+    "hubsoft_configurar_autenticacao",
+    {
+      title: "Configurar autentica\xE7\xE3o do servi\xE7o (phy_addr, interface, login)",
+      description: "ESCRITA. Altera a autentica\xE7\xE3o de um servi\xE7o: id_interface_conexao (PON), phy_addr (serial/MAC da ONU), login, password e observa\xE7\xF5es \u2014 \xFAtil para vincular uma ONU j\xE1 autorizada na OLT sem desprovisionar. Regras da API: n\xE3o altera servi\xE7o cancelado; o phy_addr n\xE3o pode estar em uso por outro assinante em outra interface; o login n\xE3o pode estar em uso. O Hubsoft grava o phy_addr em mai\xFAsculas. confirmar=false (padr\xE3o) s\xF3 simula e mostra estado atual, requisi\xE7\xE3o e efeito; confirmar=true executa e devolve o diff antes/depois. Exige uma \xFAnica base em `servidor`.",
+      inputSchema: {
+        id_cliente_servico: external_exports.number().int().positive(),
+        id_interface_conexao: external_exports.number().int().positive().optional(),
+        phy_addr: phySchema.optional(),
+        login: external_exports.string().min(3, "login: m\xEDnimo 3 caracteres").max(255, "login: m\xE1ximo 255 caracteres").optional(),
+        password: external_exports.string().min(3, "password: m\xEDnimo 3 caracteres").optional(),
+        observacoes: external_exports.string().nullable().optional().describe("Texto livre; vazio ou null limpa."),
+        confirmar
+      },
+      annotations: { ...ESCRITA, destructiveHint: false, idempotentHint: true }
+    },
+    async (args) => {
+      try {
+        const { id_cliente_servico, id_interface_conexao, phy_addr, login, password, confirmar: conf } = args;
+        const temObs = Object.prototype.hasOwnProperty.call(args, "observacoes");
+        if ([id_interface_conexao, phy_addr, login, password].every((v) => v === void 0) && !temObs) {
+          throw new Error("Informe pelo menos um entre id_interface_conexao, phy_addr, login, password e observacoes.");
+        }
+        const corpo = { id_cliente_servico };
+        if (id_interface_conexao !== void 0) corpo.id_interface_conexao = id_interface_conexao;
+        if (phy_addr !== void 0) corpo.phy_addr = phy_addr;
+        if (login !== void 0) corpo.login = login;
+        if (password !== void 0) corpo.password = password;
+        if (temObs) corpo.observacoes = args.observacoes ?? null;
+        const antes = await lerEstado(hs, { servico: id_cliente_servico, phy: phy_addr });
+        const sv = antes.servico?.servico;
+        const avisos = [];
+        if (antes.servico?.erro) avisos.push(`Leitura pr\xE9via do servi\xE7o falhou: ${JSON.stringify(antes.servico.erro)}`);
+        if (sv?.status_prefixo === "cancelado") avisos.push("Servi\xE7o CANCELADO: a API recusa a altera\xE7\xE3o.");
+        if (phy_addr) {
+          const cpes = antes.cpe?.encontradas ?? [];
+          const outros = cpes.flatMap((c) => c.servicos_vinculados).filter((id) => id !== id_cliente_servico);
+          if (outros.length) avisos.push(`A CPE ${phy_addr} j\xE1 est\xE1 vinculada a outro(s) servi\xE7o(s): ${[...new Set(outros)].join(", ")}. A API recusa phy_addr em uso por outro assinante em outra interface.`);
+          if (!cpes.length && !antes.cpe?.erro) avisos.push(`phy_addr ${phy_addr} n\xE3o est\xE1 no invent\xE1rio de CPEs do Hubsoft (vincular_cpe falharia at\xE9 a CPE ser encontrada pela varredura).`);
+        }
+        const efeito = [];
+        if (phy_addr !== void 0) efeito.push(`phy_addr: ${JSON.stringify(sv?.phy_addr ?? null)} \u2192 "${phy_addr.toUpperCase()}"`);
+        if (id_interface_conexao !== void 0) efeito.push(`id_interface_conexao: ${JSON.stringify(sv?.id_interface_conexao ?? null)} \u2192 ${id_interface_conexao}`);
+        if (login !== void 0) efeito.push(`login: ${JSON.stringify(sv?.login ?? null)} \u2192 "${login}" (recusado se o login j\xE1 estiver em uso)`);
+        if (password !== void 0) efeito.push("password de autentica\xE7\xE3o: ser\xE1 alterada (n\xE3o exibida)");
+        if (temObs) efeito.push(`observa\xE7\xF5es: ${args.observacoes ? "atualizadas" : "limpas"}`);
+        return await escrever(hs, {
+          ferramenta: "hubsoft_configurar_autenticacao",
+          path: `${API}/cliente/configurar_autenticacao`,
+          corpo,
+          corpoExibicao: password !== void 0 ? { ...corpo, password: "***" } : corpo,
+          confirmar: conf,
+          alvo: { servico: id_cliente_servico, phy: phy_addr },
+          estadoAntes: antes,
+          efeito,
+          avisos
+        });
+      } catch (e) {
+        return fail(e);
+      }
+    }
+  );
+  server.registerTool(
+    "hubsoft_vincular_cpe",
+    {
+      title: "Vincular CPE ao servi\xE7o",
+      description: 'ESCRITA. Vincula a CPE (ONU) \xE0 autentica\xE7\xE3o do servi\xE7o. Informe EXATAMENTE um: id_cliente_servico (usa o phy_addr gravado na autentica\xE7\xE3o) ou phy_addr (procura a autentica\xE7\xE3o com esse phy_addr). Comportamento observado em produ\xE7\xE3o: ao vincular, o Hubsoft preenche SOZINHO o equipamento de conex\xE3o (OLT), a interface (PON) e o roteamento (BNG/VLAN) a partir da varredura da CPE \u2014 por isso o resultado traz o diff antes/depois. Erro conhecido: "CPE n\xE3o encontrada para o MAC informado" (phy_addr fora do invent\xE1rio). confirmar=false (padr\xE3o) s\xF3 simula. Exige uma \xFAnica base em `servidor`.',
+      inputSchema: {
+        id_cliente_servico: external_exports.number().int().positive().optional(),
+        phy_addr: phySchema.optional(),
+        confirmar
+      },
+      annotations: { ...ESCRITA, destructiveHint: false }
+    },
+    async ({ id_cliente_servico, phy_addr, confirmar: conf }) => {
+      try {
+        if (Boolean(id_cliente_servico) === Boolean(phy_addr)) {
+          throw new Error("Informe exatamente um entre id_cliente_servico e phy_addr (os dois juntos n\xE3o s\xE3o aceitos).");
+        }
+        const avisos = [];
+        let phy = phy_addr;
+        const antes = {};
+        if (id_cliente_servico) {
+          antes.servico = await lerServico(hs, id_cliente_servico);
+          phy = antes.servico?.servico?.phy_addr || void 0;
+          if (!phy) avisos.push("O servi\xE7o n\xE3o tem phy_addr na autentica\xE7\xE3o: configure-o antes com hubsoft_configurar_autenticacao.");
+        }
+        if (phy) {
+          antes.cpe = await lerCpe(hs, phy);
+          if (!(antes.cpe?.encontradas ?? []).length) {
+            avisos.push(`O phy_addr ${phy} n\xE3o existe no invent\xE1rio de CPEs: a API deve responder "CPE n\xE3o encontrada para o MAC informado".`);
+          }
+        }
+        return await escrever(hs, {
+          ferramenta: "hubsoft_vincular_cpe",
+          path: `${API}/cliente/vincular_cpe`,
+          corpo: id_cliente_servico ? { id_cliente_servico } : { phy_addr },
+          confirmar: conf,
+          alvo: { servico: id_cliente_servico, phy },
+          estadoAntes: antes,
+          efeito: [
+            `Vincular a CPE ${phy ?? "(phy_addr do servi\xE7o)"} \xE0 autentica\xE7\xE3o do servi\xE7o.`,
+            "O Hubsoft deve preencher automaticamente OLT, PON e roteamento (BNG/VLAN) pela varredura da CPE \u2014 confira no diff."
+          ],
+          avisos
+        });
+      } catch (e) {
+        return fail(e);
+      }
+    }
+  );
+  server.registerTool(
+    "hubsoft_desvincular_cpe",
+    {
+      title: "Desvincular CPE do servi\xE7o",
+      description: "ESCRITA, DESTRUTIVA. Desvincula CPE(s) do servi\xE7o. S\xF3 com id_cliente_servico, desvincula TODAS as CPEs do servi\xE7o; com phy_addr (com ou sem separadores, qualquer caixa), s\xF3 aquela. Se a CPE desvinculada for a da autentica\xE7\xE3o, o phy_addr do servi\xE7o \xE9 ZERADO. Efeito imediato e registrado no hist\xF3rico do cliente. A simula\xE7\xE3o (confirmar=false, padr\xE3o) mostra o efeito e o comando de rollback. Exige uma \xFAnica base em `servidor`.",
+      inputSchema: {
+        id_cliente_servico: external_exports.number().int().positive(),
+        phy_addr: external_exports.string().trim().min(1).optional().describe("Limita a um equipamento."),
+        confirmar
+      },
+      annotations: { ...ESCRITA, destructiveHint: true }
+    },
+    async ({ id_cliente_servico, phy_addr, confirmar: conf }) => {
+      try {
+        const antes = await lerEstado(hs, { servico: id_cliente_servico });
+        const sv = antes.servico?.servico;
+        const avisos = [];
+        if (antes.servico?.erro) avisos.push(`Leitura pr\xE9via do servi\xE7o falhou: ${JSON.stringify(antes.servico.erro)}`);
+        const cpes = Array.isArray(sv?.cpes) ? sv.cpes : [];
+        const alvos = phy_addr ? cpes.filter((c) => normPhy(c.phy_addr) === normPhy(phy_addr)) : cpes;
+        if (phy_addr && !alvos.length) avisos.push(`Nenhuma CPE com phy_addr ${phy_addr} vinculada a este servi\xE7o segundo a leitura pr\xE9via.`);
+        const zeraAuth = sv?.phy_addr && (phy_addr ? normPhy(phy_addr) === normPhy(sv.phy_addr) : true);
+        const efeito = [
+          phy_addr ? `Desvincular a CPE ${phy_addr} do servi\xE7o ${id_cliente_servico}.` : `Desvincular TODAS as CPEs do servi\xE7o ${id_cliente_servico} (${cpes.length} na leitura pr\xE9via).`,
+          zeraAuth ? `O phy_addr da autentica\xE7\xE3o (${sv.phy_addr}) ser\xE1 ZERADO.` : "O phy_addr da autentica\xE7\xE3o n\xE3o deve mudar.",
+          "Efeito imediato, registrado no hist\xF3rico do cliente."
+        ];
+        const rollback = sv?.phy_addr ? [
+          {
+            ferramenta: "hubsoft_configurar_autenticacao",
+            argumentos: {
+              servidor: hs.config.nome,
+              id_cliente_servico,
+              phy_addr: sv.phy_addr,
+              ...sv.id_interface_conexao ? { id_interface_conexao: Number(sv.id_interface_conexao) } : {},
+              confirmar: true
+            }
+          },
+          { ferramenta: "hubsoft_vincular_cpe", argumentos: { servidor: hs.config.nome, id_cliente_servico, confirmar: true } }
+        ] : "Sem phy_addr atual na autentica\xE7\xE3o: n\xE3o h\xE1 rollback autom\xE1tico a sugerir.";
+        return await escrever(hs, {
+          ferramenta: "hubsoft_desvincular_cpe",
+          path: `${API}/cliente/desvincular_cpe`,
+          corpo: phy_addr ? { id_cliente_servico, phy_addr } : { id_cliente_servico },
+          confirmar: conf,
+          alvo: { servico: id_cliente_servico },
+          estadoAntes: antes,
+          efeito,
+          avisos,
+          extra: { cpes_afetadas: alvos, rollback }
+        });
+      } catch (e) {
+        return fail(e);
+      }
+    }
+  );
+  const controle = (acao) => async (args) => {
+    try {
+      const { phy_addr, confirmar: conf } = args;
+      const antes = await lerEstado(hs, { phy: phy_addr });
+      const cpes = antes.cpe?.encontradas ?? [];
+      const avisos = [];
+      let bloqueio;
+      if (antes.cpe?.erro) bloqueio = `Consulta da CPE falhou: ${JSON.stringify(antes.cpe.erro)}`;
+      else if (!cpes.length) bloqueio = `CPE ${phy_addr} n\xE3o encontrada pelo sistema (rede/cpe/todos). A a\xE7\xE3o s\xF3 funciona com CPEs j\xE1 encontradas.`;
+      if (acao === "reiniciar") avisos.push("O cliente fica SEM CONEX\xC3O durante o reboot da CPE.");
+      else {
+        avisos.push("RESTAURA\xC7\xC3O DE F\xC1BRICA: a CPE perde PPPoE, Wi-Fi e qualquer outra configura\xE7\xE3o; o cliente fica sem servi\xE7o at\xE9 reconfigurar.");
+        if (conf && normPhy(args.confirmar_phy_addr) !== normPhy(phy_addr)) {
+          bloqueio = "Para restaurar, informe confirmar_phy_addr com o MESMO valor de phy_addr.";
+        }
+      }
+      return await escrever(hs, {
+        ferramenta: `hubsoft_${acao}_cpe`,
+        path: `${API}/rede/${acao}_cpe/${encodeURIComponent(phy_addr)}`,
+        corpo: [],
+        confirmar: conf,
+        alvo: { phy: phy_addr },
+        estadoAntes: antes,
+        efeito: acao === "reiniciar" ? `Reiniciar a CPE ${phy_addr}.` : `Restaurar a CPE ${phy_addr} para a configura\xE7\xE3o de f\xE1brica.`,
+        avisos,
+        bloqueio,
+        extra: { cpe: cpes[0] ?? null }
+      });
+    } catch (e) {
+      return fail(e);
+    }
+  };
+  server.registerTool(
+    "hubsoft_reiniciar_cpe",
+    {
+      title: "Reiniciar CPE",
+      description: "CONTROLE. Reinicia a CPE pelo Hubsoft. S\xF3 funciona com CPEs j\xE1 encontradas pelo sistema (a ferramenta consulta antes e mostra a CPE e o servi\xE7o vinculado). O cliente fica sem conex\xE3o durante o reboot. confirmar=false (padr\xE3o) s\xF3 simula. Exige uma \xFAnica base em `servidor`.",
+      inputSchema: { phy_addr: phySchema, confirmar },
+      annotations: { ...ESCRITA, destructiveHint: true, idempotentHint: false }
+    },
+    controle("reiniciar")
+  );
+  server.registerTool(
+    "hubsoft_restaurar_cpe",
+    {
+      title: "Restaurar CPE para configura\xE7\xE3o de f\xE1brica",
+      description: "CONTROLE DESTRUTIVO. Restaura a CPE para a configura\xE7\xE3o de F\xC1BRICA: perde PPPoE, Wi-Fi e qualquer outra configura\xE7\xE3o. Al\xE9m de confirmar=true, exige confirmar_phy_addr igual ao phy_addr. confirmar=false (padr\xE3o) s\xF3 simula. Exige uma \xFAnica base em `servidor`.",
+      inputSchema: {
+        phy_addr: phySchema,
+        confirmar,
+        confirmar_phy_addr: external_exports.string().optional().describe("Repita o phy_addr para confirmar a restaura\xE7\xE3o.")
+      },
+      annotations: { ...ESCRITA, destructiveHint: true, idempotentHint: false }
+    },
+    controle("restaurar")
+  );
+  server.registerTool(
+    "hubsoft_cpe_gerenciar",
+    {
+      title: "CPE: alterar par\xE2metros (Wi-Fi etc.) via ACS",
+      description: "ESCRITA. Altera par\xE2metros da CPE pelo gerenciador do Hubsoft (ex.: wifi_ssid, wifi_password, wifi_ssid_5ghz, wifi_password_5ghz). Antes, l\xEA os par\xE2metros atuais e valida que cada prefixo existe e que o formato do valor \xE9 compat\xEDvel. A simula\xE7\xE3o (confirmar=false, padr\xE3o) mostra valor atual \u2192 novo, com senhas mascaradas (mostrar_senhas=true para ver). A altera\xE7\xE3o \xE9 aplicada de fato na CPE. Exige uma \xFAnica base em `servidor`.",
+      inputSchema: {
+        id_cpe: external_exports.number().int().positive(),
+        parametros: external_exports.array(external_exports.object({ prefixo: external_exports.string().min(1), valor: external_exports.string() })).min(1).describe('Ex.: [{"prefixo":"wifi_ssid","valor":"MinhaRede"}]'),
+        confirmar,
+        mostrar_senhas: mostrarSenhas
+      },
+      annotations: { ...ESCRITA, destructiveHint: false }
+    },
+    async ({ id_cpe, parametros, confirmar: conf, mostrar_senhas }) => {
+      try {
+        const ini = await iniciarGerenciamento(hs, { id_cpe });
+        if (!ini.ok || ini.body?.status === "error") {
+          return responder(hs, { etapa: "iniciar_gerenciamento", http_status: ini.status, resposta: ini.body }, true);
+        }
+        const atuais = ini.body?.cpe?.parametros ?? [];
+        const porPrefixo = new Map(atuais.map((x) => [String(x.prefixo), x]));
+        const erros = [];
+        const vistos = /* @__PURE__ */ new Set();
+        for (const p of parametros) {
+          if (vistos.has(p.prefixo)) erros.push(`${p.prefixo}: repetido`);
+          vistos.add(p.prefixo);
+          const at = porPrefixo.get(p.prefixo);
+          if (!at) erros.push(`${p.prefixo}: prefixo inexistente nesta CPE (dispon\xEDveis: ${[...porPrefixo.keys()].join(", ")})`);
+          else {
+            const e = validarValor(p.prefixo, at.valor, p.valor);
+            if (e) erros.push(e);
+          }
+        }
+        const ver = (prefixo, v) => !mostrar_senhas && /password/i.test(prefixo) ? mascara(v) : v;
+        const alteracoes = parametros.map((p) => ({
+          prefixo: p.prefixo,
+          descricao: porPrefixo.get(p.prefixo)?.descricao,
+          atual: ver(p.prefixo, porPrefixo.get(p.prefixo)?.valor),
+          novo: ver(p.prefixo, p.valor)
+        }));
+        if (erros.length) {
+          return responder(hs, { modo: "simulacao", nada_foi_enviado: true, erros_de_validacao: erros, alteracoes }, true);
+        }
+        const corpo = { id_cpe, parametros };
+        const corpoExibicao = { id_cpe, parametros: parametros.map((p) => ({ prefixo: p.prefixo, valor: ver(p.prefixo, p.valor) })) };
+        const requisicao = { metodo: "POST", url: `${hs.config.baseUrl}${API}/rede/cpe/gerenciar`, corpo: corpoExibicao };
+        if (!conf) {
+          return responder(hs, {
+            modo: "simulacao",
+            nada_foi_enviado: true,
+            requisicao_que_seria_enviada: requisicao,
+            cpe: { id_cpe, phy_addr: ini.body?.cpe?.phy_addr },
+            alteracoes,
+            efeito_esperado: "Os par\xE2metros ser\xE3o aplicados na CPE pelo gerenciador (ACS). Alterar Wi-Fi desconecta os dispositivos do cliente.",
+            para_executar: "Confirme com o usu\xE1rio e repita a chamada com confirmar=true."
+          });
+        }
+        const r = await hs.raw("POST", `${API}/rede/cpe/gerenciar`, { body: corpo });
+        const sucesso = r.ok && r.body?.status !== "error";
+        const releitura = await iniciarGerenciamento(hs, { id_cpe });
+        const depoisPorPrefixo = new Map((releitura.body?.cpe?.parametros ?? []).map((x) => [String(x.prefixo), x]));
+        const antesSel = Object.fromEntries(parametros.map((p) => [p.prefixo, ver(p.prefixo, porPrefixo.get(p.prefixo)?.valor)]));
+        const depoisSel = Object.fromEntries(parametros.map((p) => [p.prefixo, ver(p.prefixo, depoisPorPrefixo.get(p.prefixo)?.valor)]));
+        const mudancas = diff(antesSel, depoisSel);
+        const registro = {
+          ferramenta: "hubsoft_cpe_gerenciar",
+          metodo: "POST",
+          url: requisicao.url,
+          corpo: semSegredos({ id_cpe, parametros }),
+          http_status: r.status,
+          resposta: r.body,
+          diff: semSegredos(diff(
+            Object.fromEntries(parametros.map((p) => [p.prefixo, /password/i.test(p.prefixo) ? "***" : porPrefixo.get(p.prefixo)?.valor])),
+            Object.fromEntries(parametros.map((p) => [p.prefixo, /password/i.test(p.prefixo) ? "***" : depoisPorPrefixo.get(p.prefixo)?.valor]))
+          ))
+        };
+        auditar(hs, registro);
+        return responder(
+          hs,
+          {
+            modo: "execucao",
+            requisicao_enviada: requisicao,
+            resultado: {
+              http_status: r.status,
+              sucesso,
+              resposta: r.body,
+              ...r.status === 429 ? { retry_after: r.retryAfter, observacao: "Limite de requisi\xE7\xF5es: n\xE3o foi repetido." } : {},
+              ...r.tokenRenovado ? { token_renovado: true } : {}
+            },
+            antes: antesSel,
+            depois: depoisSel,
+            diff: mudancas,
+            ...releitura.ok ? {} : { aviso: `Releitura falhou (HTTP ${releitura.status}); o diff pode estar incompleto.` }
+          },
+          !sucesso
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    }
+  );
+}
+
 // src/tools/leitura.ts
 var READ = { readOnlyHint: true, openWorldHint: true };
 var busca = external_exports.string().describe(
@@ -37737,12 +38352,13 @@ function collectTools(hs) {
   registerHigiene(collector, hs);
   registerLeitura(collector, hs);
   if (!hs.config.readOnly) registerEscrita(collector, hs);
+  registerCpe(collector, hs);
   registerGraphql(collector, hs);
   return defs;
 }
 
 // src/version.ts
-var VERSION = "0.6.0";
+var VERSION = "0.7.0";
 
 // src/multi.ts
 function diagnosticoVariaveis() {
@@ -37755,8 +38371,26 @@ function diagnosticoVariaveis() {
   return out;
 }
 var TODOS = /* @__PURE__ */ new Set(["", "todos", "todas", "all", "*"]);
+var UMA_BASE_LEITURA = /* @__PURE__ */ new Set(["hubsoft_cpe_iniciar_gerenciamento"]);
 function exigeUmServidor(t) {
-  return t.config.annotations?.readOnlyHint === false && t.name !== "hubsoft_graphql";
+  return t.config.annotations?.readOnlyHint === false && t.name !== "hubsoft_graphql" || UMA_BASE_LEITURA.has(t.name);
+}
+function resolverUmaBase(servers, pedido) {
+  const lista = descreverServidores(servers);
+  const termo2 = (pedido ?? "").trim();
+  if (!termo2) throw new Error(`O par\xE2metro servidor \xE9 obrigat\xF3rio nesta ferramenta: informe UMA base (${lista}).`);
+  if (TODOS.has(termo2.toLowerCase()) || termo2.includes(",")) {
+    throw new Error(`Esta ferramenta age em UMA base por vez: "todos" e listas n\xE3o s\xE3o aceitos. Bases: ${lista}.`);
+  }
+  const s = servers.find((x) => x.nome === normalizarNome(termo2));
+  if (!s) throw new Error(`Servidor "${termo2}" n\xE3o encontrado. Use o nome exato de uma base: ${lista}.`);
+  return s;
+}
+function comServidor(nome, r, max) {
+  const d = parse3(r.content.map((c) => c.text).join("\n"));
+  const corpo = d && typeof d === "object" && !Array.isArray(d) ? { servidor: nome, ...d } : { servidor: nome, resultado: d };
+  const saida = ok(corpo, max);
+  return r.isError ? { ...saida, isError: true } : saida;
 }
 function rotulo(s) {
   return s.descricao ? `${s.nome} (${s.descricao})` : s.nome;
@@ -37856,7 +38490,32 @@ function collectMultiTools(servers) {
     })
   };
   if (servers.length === 1) {
-    return [toolServidores, ...collectTools(clientes.get(servers[0].nome))];
+    const unico = servers[0];
+    return [
+      toolServidores,
+      ...collectTools(clientes.get(unico.nome)).map((t) => {
+        if (!exigeUmServidor(t)) return t;
+        return {
+          ...t,
+          config: {
+            ...t.config,
+            inputSchema: {
+              servidor: external_exports.string().describe(`Obrigat\xF3rio: a base onde executar (${rotulo(unico)}).`),
+              ...t.config.inputSchema ?? {}
+            }
+          },
+          cb: async (args) => {
+            try {
+              const { servidor, ...resto } = args ?? {};
+              resolverUmaBase(servers, servidor);
+              return comServidor(unico.nome, await t.cb(resto), max);
+            } catch (e) {
+              return fail(e);
+            }
+          }
+        };
+      })
+    ];
   }
   const porServidor = new Map(
     servers.map((s) => [
@@ -37870,9 +38529,7 @@ function collectMultiTools(servers) {
   const combinadas = nomes.map((name) => {
     const base = [...porServidor.values()].flat().find((d) => d.name === name);
     const umSo = exigeUmServidor(base);
-    const servidorParam = external_exports.string().optional().describe(
-      umSo ? `Obrigat\xF3rio: a base onde executar (${lista}).` : `Base(s) a consultar: nome, lista separada por v\xEDrgula ou "todos" (padr\xE3o). Bases: ${lista}.`
-    );
+    const servidorParam = umSo ? external_exports.string().describe(`Obrigat\xF3rio: UMA base onde executar, pelo nome exato (${lista}). "todos" e listas s\xE3o recusados.`) : external_exports.string().optional().describe(`Base(s) a consultar: nome, lista separada por v\xEDrgula ou "todos" (padr\xE3o). Bases: ${lista}.`);
     return {
       name,
       config: {
@@ -37883,10 +38540,17 @@ function collectMultiTools(servers) {
       cb: async (args) => {
         try {
           const { servidor, ...resto } = args ?? {};
-          const alvos = resolverServidores(servers, servidor);
-          if (umSo && alvos.length !== 1) {
-            throw new Error(`Esta a\xE7\xE3o altera dados: informe uma \xFAnica base no par\xE2metro servidor (${lista}).`);
+          if (umSo) {
+            const alvo = resolverUmaBase(servers, servidor);
+            const def = porServidor.get(alvo.nome).find((d) => d.name === name);
+            if (!def) {
+              throw new Error(
+                `[${alvo.nome}] ferramenta indispon\xEDvel nesta base` + (base.config.annotations?.readOnlyHint === false ? " (escrita n\xE3o habilitada: HUBSOFT_PERMITIR_ESCRITA)." : ".")
+              );
+            }
+            return comServidor(alvo.nome, await def.cb(resto), max);
           }
+          const alvos = resolverServidores(servers, servidor);
           const resultados = await Promise.all(
             alvos.map(async (s) => {
               const def = porServidor.get(s.nome).find((d) => d.name === name);
@@ -37931,7 +38595,7 @@ function collectMultiTools(servers) {
 }
 
 // src/index.ts
-var INSTRUCTIONS = "Ferramentas para o ERP Hubsoft (provedores de internet). As chamadas usam o login do pr\xF3prio usu\xE1rio, ent\xE3o o acesso segue as permiss\xF5es dele no Hubsoft. Para perguntas sobre um cliente, comece por hubsoft_situacao_cliente (CPF/CNPJ ou c\xF3digo). Para listas de clientes bloqueados/suspensos ou por qualquer status de servi\xE7o, use hubsoft_servicos_por_status (filtra no servidor; n\xE3o varra a base). Para totais de um per\xEDodo (faturamento, recebimentos, inadimpl\xEAncia por m\xEAs), use hubsoft_resumo_financeiro, que pagina e soma no servidor; nunca pagine faturas para somar. Para clientes com cadastro ativo e sem servi\xE7o ativo, use hubsoft_clientes_ativos_sem_servico_ativo (varre a base no servidor); nunca pagine clientes manualmente. Para buscas por nome, login ou outros campos use hubsoft_buscar_cliente. Para relat\xF3rios por per\xEDodo, POPs, CPEs/ONUs, notas fiscais e sess\xF5es RADIUS, use as ferramentas GraphQL (hubsoft_graphql_consultas \u2192 hubsoft_graphql_tipo \u2192 hubsoft_graphql). Faturas com status 'aguardando' e vencimento futuro (ex.: parcelas de carn\xEA) n\xE3o est\xE3o vencidas. Senhas (ex.: PPPoE) s\xE3o mascaradas por padr\xE3o. Dados de clientes s\xE3o pessoais (LGPD): mostre apenas o necess\xE1rio. Antes de qualquer a\xE7\xE3o que altere dados, confirme cliente e servi\xE7o com o usu\xE1rio.";
+var INSTRUCTIONS = "Ferramentas para o ERP Hubsoft (provedores de internet). As chamadas usam o login do pr\xF3prio usu\xE1rio, ent\xE3o o acesso segue as permiss\xF5es dele no Hubsoft. Para perguntas sobre um cliente, comece por hubsoft_situacao_cliente (CPF/CNPJ ou c\xF3digo). Para listas de clientes bloqueados/suspensos ou por qualquer status de servi\xE7o, use hubsoft_servicos_por_status (filtra no servidor; n\xE3o varra a base). Para totais de um per\xEDodo (faturamento, recebimentos, inadimpl\xEAncia por m\xEAs), use hubsoft_resumo_financeiro, que pagina e soma no servidor; nunca pagine faturas para somar. Para clientes com cadastro ativo e sem servi\xE7o ativo, use hubsoft_clientes_ativos_sem_servico_ativo (varre a base no servidor); nunca pagine clientes manualmente. Para buscas por nome, login ou outros campos use hubsoft_buscar_cliente. Para relat\xF3rios por per\xEDodo, POPs, CPEs/ONUs, notas fiscais e sess\xF5es RADIUS, use as ferramentas GraphQL (hubsoft_graphql_consultas \u2192 hubsoft_graphql_tipo \u2192 hubsoft_graphql). Faturas com status 'aguardando' e vencimento futuro (ex.: parcelas de carn\xEA) n\xE3o est\xE3o vencidas. Senhas (ex.: PPPoE) s\xE3o mascaradas por padr\xE3o. Dados de clientes s\xE3o pessoais (LGPD): mostre apenas o necess\xE1rio. Antes de qualquer a\xE7\xE3o que altere dados, confirme cliente e servi\xE7o com o usu\xE1rio. Ferramentas de escrita/controle de CPE (configurar_autenticacao, vincular/desvincular_cpe, reiniciar/restaurar_cpe, cpe_gerenciar) exigem servidor com UMA base e come\xE7am SEMPRE em simula\xE7\xE3o (confirmar=false): mostre ao usu\xE1rio o estado atual, a requisi\xE7\xE3o e o efeito, e s\xF3 repita com confirmar=true depois de ele aprovar explicitamente. Depois de executar, mostre o diff antes/depois.";
 async function main() {
   const servers = loadServers();
   const cfg = servers[0];

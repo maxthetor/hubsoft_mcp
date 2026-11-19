@@ -1,7 +1,7 @@
 {
   "name": "hubsoft",
   "displayName": "Hubsoft (não oficial)",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Consulte uma ou várias bases do ERP Hubsoft com as permissões do seu próprio usuário: clientes, bloqueados, PPPoE, ONU, RADIUS, faturas, atendimentos e OS.",
   "author": {
     "name": "Marcelo",
@@ -156,12 +156,6 @@
       "required": false,
       "sensitive": true
     },
-    "read_only": {
-      "type": "boolean",
-      "title": "Somente leitura",
-      "description": "Desmarque para habilitar desbloqueio em confiança e envio de faturas",
-      "default": true
-    },
     "graphql_path": {
       "type": "string",
       "title": "Caminho GraphQL",
@@ -172,6 +166,18 @@
       "type": "string",
       "title": "Arquivo com mais servidores (opcional)",
       "description": "Mais de 3 bases? Caminho de um servidores.json (veja o README)",
+      "required": false
+    },
+    "permitir_escrita": {
+      "type": "boolean",
+      "title": "Permitir escrita (todas as bases)",
+      "description": "Habilita desbloqueio, envio de fatura e as ferramentas de CPE. Sempre começam em simulação",
+      "default": false
+    },
+    "arquivo_auditoria": {
+      "type": "string",
+      "title": "Arquivo de auditoria (opcional)",
+      "description": "JSONL das escritas executadas. Padrão: ~/.config/hubsoft/auditoria.jsonl; off desativa",
       "required": false
     }
   },

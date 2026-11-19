@@ -4,6 +4,7 @@ import { registerSituacao } from "./tools/situacao.js";
 import { registerStatus } from "./tools/status.js";
 import { registerResumo } from "./tools/resumo.js";
 import { registerHigiene } from "./tools/higiene.js";
+import { registerCpe } from "./tools/cpe.js";
 import { registerLeitura } from "./tools/leitura.js";
 import { registerEscrita } from "./tools/escrita.js";
 import { registerGraphql } from "./tools/graphql.js";
@@ -42,6 +43,7 @@ export function collectTools(hs: HubsoftClient): ToolDef[] {
   registerHigiene(collector, hs);
   registerLeitura(collector, hs);
   if (!hs.config.readOnly) registerEscrita(collector, hs);
+  registerCpe(collector, hs); // leitura ACS sempre; escritas só com permissão
   registerGraphql(collector, hs);
   return defs;
 }

@@ -27,9 +27,10 @@
         "HUBSOFT_3_CLIENT_SECRET": "${user_config.client_secret_3}",
         "HUBSOFT_3_USERNAME": "${user_config.username_3}",
         "HUBSOFT_3_PASSWORD": "${user_config.password_3}",
-        "HUBSOFT_READ_ONLY": "${user_config.read_only}",
         "HUBSOFT_GRAPHQL_PATH": "${user_config.graphql_path}",
-        "HUBSOFT_CONFIG": "${user_config.arquivo_servidores}"
+        "HUBSOFT_CONFIG": "${user_config.arquivo_servidores}",
+        "HUBSOFT_PERMITIR_ESCRITA": "${user_config.permitir_escrita}",
+        "HUBSOFT_AUDITORIA": "${user_config.arquivo_auditoria}"
       }
     }
   }

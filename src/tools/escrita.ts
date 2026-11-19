@@ -5,7 +5,7 @@ import { API, run } from "../util.js";
 
 /**
  * Ferramentas que ALTERAM dados no Hubsoft.
- * Só são registradas quando HUBSOFT_READ_ONLY=false.
+ * Só são registradas com HUBSOFT_PERMITIR_ESCRITA=true (global ou por base; legado: HUBSOFT_READ_ONLY=false).
  * Marcadas como destrutivas para que o cliente MCP peça confirmação ao usuário.
  */
 export function registerEscrita(server: McpServer, hs: HubsoftClient) {

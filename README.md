@@ -99,7 +99,7 @@ Com uma base só, nada muda: as respostas são as mesmas da v0.3.
 Nos exemplos abaixo, `HUBSOFT_MCP` é o comando do servidor:
 
 ```
-npx -y github:maxthetor/hubsoft_mcp#v0.6.0
+npx -y github:maxthetor/hubsoft_mcp#v0.7.0
 ```
 
 Ou clone o repositório e use `node /caminho/hubsoft_mcp/server/hubsoft-mcp.mjs`.
@@ -128,7 +128,7 @@ Baixe o `hubsoft-mcp.mcpb` da [última release](https://github.com/maxthetor/hub
   "mcp": {
     "hubsoft": {
       "type": "local",
-      "command": ["npx", "-y", "github:maxthetor/hubsoft_mcp#v0.6.0"],
+      "command": ["npx", "-y", "github:maxthetor/hubsoft_mcp#v0.7.0"],
       "enabled": true,
       "environment": {
         "HUBSOFT_URL": "https://api.seuprovedor.hubsoft.com.br",
@@ -153,7 +153,7 @@ Skill: copie `skills/hubsoft/` para `~/.config/opencode/skills/hubsoft/`. O Open
   "mcpServers": {
     "hubsoft": {
       "command": "npx",
-      "args": ["-y", "github:maxthetor/hubsoft_mcp#v0.6.0"],
+      "args": ["-y", "github:maxthetor/hubsoft_mcp#v0.7.0"],
       "env": {
         "HUBSOFT_URL": "https://api.seuprovedor.hubsoft.com.br",
         "HUBSOFT_CLIENT_ID": "...",
@@ -182,7 +182,7 @@ Skill: `.cursor/skills/hubsoft/` (Cursor) ou `~/.gemini/skills/hubsoft/` (Gemini
     "hubsoft": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "github:maxthetor/hubsoft_mcp#v0.6.0"],
+      "args": ["-y", "github:maxthetor/hubsoft_mcp#v0.7.0"],
       "env": {
         "HUBSOFT_URL": "https://api.seuprovedor.hubsoft.com.br",
         "HUBSOFT_CLIENT_ID": "...",
@@ -204,7 +204,7 @@ Skill: `.github/skills/hubsoft/`.
 ```toml
 [mcp_servers.hubsoft]
 command = "npx"
-args = ["-y", "github:maxthetor/hubsoft_mcp#v0.6.0"]
+args = ["-y", "github:maxthetor/hubsoft_mcp#v0.7.0"]
 env = { HUBSOFT_URL = "https://api.seuprovedor.hubsoft.com.br", HUBSOFT_CLIENT_ID = "...", HUBSOFT_CLIENT_SECRET = "...", HUBSOFT_USERNAME = "voce.api@provedor.com.br", HUBSOFT_PASSWORD = "..." }
 ```
 
@@ -240,14 +240,48 @@ node scripts/hubsoft.mjs graphql --query '{ pops(first: 10) { data { id_pop } } 
 | `hubsoft_graphql_consultas` | Consultas GraphQL disponíveis **no seu Hubsoft**, lidas ao vivo |
 | `hubsoft_graphql_tipo` | Campos de um tipo do esquema |
 | `hubsoft_graphql` | Relatórios por período, POPs, CPEs, NFS-e, sessões RADIUS… |
+| `hubsoft_cpe_iniciar_gerenciamento` | Parâmetros gerenciáveis da CPE via ACS (Wi-Fi etc.), senhas mascaradas |
 | `hubsoft_desbloqueio_confianca` ✏️ | Desbloqueio em confiança |
 | `hubsoft_enviar_fatura_email` ✏️ | Envia fatura por e-mail |
+| `hubsoft_configurar_autenticacao` ✏️ | `phy_addr`, interface (PON), login, senha e observações da autenticação |
+| `hubsoft_vincular_cpe` ✏️ | Vincula a CPE ao serviço; o Hubsoft preenche OLT, PON e roteamento sozinho |
+| `hubsoft_desvincular_cpe` ✏️⚠️ | Desvincula CPE(s); zera o `phy_addr` se for a CPE da autenticação |
+| `hubsoft_reiniciar_cpe` ✏️⚠️ | Reinicia a CPE (cliente fica sem conexão durante o reboot) |
+| `hubsoft_restaurar_cpe` ✏️⚠️ | Restaura a CPE para fábrica (exige `confirmar_phy_addr`) |
+| `hubsoft_cpe_gerenciar` ✏️ | Altera parâmetros da CPE via ACS (SSID, senha Wi-Fi…) |
 
 Com 2 ou mais bases, todas as ferramentas aceitam o parâmetro `servidor` (padrão: todas).
 
-✏️ As ferramentas de escrita ficam **desligadas por padrão** (`HUBSOFT_READ_ONLY=true`). Quando ligadas, vêm marcadas como destrutivas, para o agente pedir confirmação. Todas as ferramentas têm `title` e `readOnlyHint`/`destructiveHint`.
+✏️ = escrita/controle, **desligada por padrão**. ⚠️ = destrutiva. Detalhes em [Escrita e controle de CPE](#escrita-e-controle-de-cpe). Todas as ferramentas têm `title` e `readOnlyHint`/`destructiveHint`/`idempotentHint`.
 
 **Atualizações do Hubsoft:** as ferramentas GraphQL leem o esquema **ao vivo**. Consultas novas que o Hubsoft lançar ficam disponíveis na hora, sem atualizar este projeto.
+
+## Escrita e controle de CPE
+
+Serve para vincular ONTs/ONUs **já autorizadas na OLT** aos serviços do Hubsoft **sem desprovisionar**, e para controlar a CPE pelo Hubsoft. As regras valem para todas as ferramentas ✏️:
+
+1. **Desligada por padrão.** As ferramentas só existem com `HUBSOFT_PERMITIR_ESCRITA=true`, global ou por base.
+2. **Uma base por vez.** `servidor` é obrigatório e precisa ser o nome exato de uma base. `"todos"`, listas e vazio são recusados, mesmo com uma base só.
+3. **Simulação primeiro.** Com `confirmar=false` (padrão), **nada é enviado**: a ferramenta lê o estado atual e mostra método, URL e corpo exatos, o efeito esperado e os avisos. Com `confirmar=true` ela executa, lê de novo e devolve o **diff antes/depois**.
+4. **Leitura antes e depois.** O serviço é lido com as relações `interface`, `equipamento_conexao`, `interface_roteamento`, `equipamento_roteamento` e `cpes`. A CPE é lida pelo `phy_addr` em `rede/cpe/todos`.
+5. **Erros visíveis.** O status HTTP e a resposta do Hubsoft vêm na íntegra (`status`, `msg`, `data`).
+6. **Sem nova tentativa em POST.** Única exceção: um 401 renova o token **uma vez** e reenvia. Um 429 devolve o `retry_after` e não repete.
+7. **Auditoria.** Cada execução (`confirmar=true`) vira uma linha em `HUBSOFT_AUDITORIA`, com data/hora, base, ferramenta, URL, corpo, status, resposta e diff. Tokens, `client_secret` e senhas aparecem como `***`.
+8. **Senhas.** A `password` da autenticação nunca é exibida. Senhas de Wi-Fi vêm mascaradas; só aparecem com `mostrar_senhas=true`.
+
+### Exemplo: vincular uma ONU já autorizada
+
+```
+1. hubsoft_configurar_autenticacao { servidor: "base_pf", id_cliente_servico: 1373, phy_addr: "ALCLFC203278" }
+   → simulação: phy_addr atual → "ALCLFC203278"; avisa se a CPE já estiver vinculada a outro serviço
+2. (mesma chamada) + confirmar: true
+   → "Parâmetros de autenticação modificados com sucesso." + diff
+3. hubsoft_vincular_cpe { servidor: "base_pf", id_cliente_servico: 1373 }            → simulação
+4. hubsoft_vincular_cpe { servidor: "base_pf", id_cliente_servico: 1373, confirmar: true }
+   → "CPE vinculada com sucesso à autenticação do cliente!" e o diff mostra OLT, PON e BNG/VLAN preenchidos
+```
+
+Na simulação, `hubsoft_desvincular_cpe` mostra o rollback pronto: `configurar_autenticacao` com o `phy_addr` e o `id_interface_conexao` atuais, seguido de `vincular_cpe`.
 
 ## Configuração
 
@@ -260,7 +294,8 @@ Com 2 ou mais bases, todas as ferramentas aceitam o parâmetro `servidor` (padr�
 | `HUBSOFT_CLIENT_SECRET` | — | Client secret do provedor |
 | `HUBSOFT_USERNAME` | — | **Seu** usuário de API |
 | `HUBSOFT_PASSWORD` | — | **Sua** senha |
-| `HUBSOFT_READ_ONLY` | `true` | `false` habilita as ferramentas de escrita |
+| `HUBSOFT_PERMITIR_ESCRITA` | `false` | `true` habilita as ferramentas ✏️ em todas as bases. Por base: `HUBSOFT_2_PERMITIR_ESCRITA`… ou `"permitir_escrita"` no `servidores.json` (a configuração por base vence a global). O legado `HUBSOFT_READ_ONLY=false` continua aceito |
+| `HUBSOFT_AUDITORIA` | `~/.config/hubsoft/auditoria.jsonl` | Log JSONL das escritas executadas; `off` desativa |
 | `HUBSOFT_GRAPHQL_PATH` | `/graphql/v1` | `off` desativa o GraphQL |
 | `HUBSOFT_EXPOR_SENHAS` | `false` | `true` mostra senhas (ex.: PPPoE) nas respostas |
 | `HUBSOFT_MAX_RESPONSE_CHARS` | `60000` | Limite de tamanho das respostas |

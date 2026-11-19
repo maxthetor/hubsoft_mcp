@@ -115,7 +115,7 @@ await c.close();
 // escrita exige uma base; erro de login numa base não derruba as outras
 c = await conectar({ HUBSOFT_READ_ONLY: "false", SENHA_VTAL: "errada" });
 r = await call(c, "hubsoft_desbloqueio_confianca", { id_cliente_servico: 1 });
-assert.equal(r.err, true); assert.match(r.text, /única base/);
+assert.equal(r.err, true); assert.match(r.text, /servidor/);
 r = await call(c, "hubsoft_desbloqueio_confianca", { id_cliente_servico: 1, servidor: "base_pj" });
 assert.equal(r.json.servidor, "base_pj"); assert.match(r.json.msg, /base_pj/);
 r = await call(c, "hubsoft_servicos_por_status", {});

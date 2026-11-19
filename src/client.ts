@@ -125,6 +125,47 @@ export class HubsoftClient {
     return body;
   }
 
+  /**
+   * Requisição que NUNCA lança erro por status HTTP: devolve status e corpo na íntegra.
+   * Usada pelas ferramentas de escrita, que precisam mostrar a resposta do Hubsoft sem filtro.
+   * - 401: renova o token UMA vez e reenvia (único reenvio permitido, inclusive em POST);
+   * - 429: não repete; devolve o erro com retry_after;
+   * - demais códigos: sem nova tentativa.
+   */
+  async raw(
+    method: "GET" | "POST",
+    path: string,
+    opts: { query?: Query; body?: unknown } = {},
+  ): Promise<{ status: number; ok: boolean; url: string; body: any; retryAfter?: number; tokenRenovado?: boolean }> {
+    const url = new URL(this.cfg.baseUrl + (path.startsWith("/") ? path : `/${path}`));
+    for (const [k, v] of Object.entries(opts.query ?? {})) {
+      if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
+    }
+    const enviar = async (force: boolean) =>
+      fetch(url, {
+        method,
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: await this.getToken(force),
+        },
+        body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+      });
+    let res = await enviar(false);
+    let tokenRenovado = false;
+    if (res.status === 401) {
+      tokenRenovado = true;
+      res = await enviar(true);
+    }
+    const body = await safeJson(res);
+    let retryAfter: number | undefined;
+    if (res.status === 429) {
+      const h = Number(res.headers.get("retry-after"));
+      retryAfter = Number(body?.retry_after ?? (Number.isFinite(h) ? h : undefined)) || undefined;
+    }
+    return { status: res.status, ok: res.ok, url: url.toString(), body, retryAfter, ...(tokenRenovado ? { tokenRenovado } : {}) };
+  }
+
   get(path: string, query?: Query) {
     return this.request("GET", path, { query });
   }

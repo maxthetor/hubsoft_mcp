@@ -21,7 +21,11 @@ export const INSTRUCTIONS =
   "Faturas com status 'aguardando' e vencimento futuro (ex.: parcelas de carnê) não estão vencidas. " +
   "Senhas (ex.: PPPoE) são mascaradas por padrão. " +
   "Dados de clientes são pessoais (LGPD): mostre apenas o necessário. " +
-  "Antes de qualquer ação que altere dados, confirme cliente e serviço com o usuário.";
+  "Antes de qualquer ação que altere dados, confirme cliente e serviço com o usuário. " +
+  "Ferramentas de escrita/controle de CPE (configurar_autenticacao, vincular/desvincular_cpe, " +
+  "reiniciar/restaurar_cpe, cpe_gerenciar) exigem servidor com UMA base e começam SEMPRE em simulação " +
+  "(confirmar=false): mostre ao usuário o estado atual, a requisição e o efeito, e só repita com " +
+  "confirmar=true depois de ele aprovar explicitamente. Depois de executar, mostre o diff antes/depois.";
 
 async function main() {
   const servers = loadServers();

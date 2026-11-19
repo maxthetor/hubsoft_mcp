@@ -16,7 +16,8 @@ O administrador do provedor cria no Hubsoft:
 | `HUBSOFT_CLIENT_SECRET` | sim | Client secret |
 | `HUBSOFT_USERNAME` | sim | Usuário de API da pessoa |
 | `HUBSOFT_PASSWORD` | sim | Senha |
-| `HUBSOFT_READ_ONLY` | não | `true` (padrão); `false` habilita desbloqueio e envio de fatura |
+| `HUBSOFT_PERMITIR_ESCRITA` | não | `true` habilita as ferramentas de escrita/CPE (padrão: desligado). Por base: `HUBSOFT_2_PERMITIR_ESCRITA` ou `"permitir_escrita": true` no servidores.json |
+| `HUBSOFT_AUDITORIA` | não | Log JSONL das escritas (padrão `~/.config/hubsoft/auditoria.jsonl`; `off` desativa) |
 | `HUBSOFT_GRAPHQL_PATH` | não | Padrão `/graphql/v1`; `off` desativa |
 | `HUBSOFT_EXPOR_SENHAS` | não | `true` mostra senhas PPPoE (padrão: mascaradas) |
 

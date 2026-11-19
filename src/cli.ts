@@ -133,10 +133,11 @@ function toolsSemCredenciais(): ToolDef[] {
     clientSecret: "",
     username: "",
     password: "",
-    readOnly: process.env.HUBSOFT_READ_ONLY?.toLowerCase() !== "false",
+    readOnly: !(process.env.HUBSOFT_PERMITIR_ESCRITA?.toLowerCase() === "true" || process.env.HUBSOFT_READ_ONLY?.toLowerCase() === "false"),
     graphqlPath: process.env.HUBSOFT_GRAPHQL_PATH === "off" ? "" : "/graphql/v1",
     maxResponseChars: 0,
     exposeSecrets: false,
+    auditoria: "",
   });
   return collectTools(fake);
 }
@@ -176,7 +177,7 @@ async function main() {
     const off = find(toolsSemCredenciais()) ? "" : " Veja: hubsoft ferramentas";
     throw new Error(
       `Ferramenta indisponível: ${cmd}.` +
-        (off || " (ferramentas de escrita exigem HUBSOFT_READ_ONLY=false)"),
+        (off || " (ferramentas de escrita exigem HUBSOFT_PERMITIR_ESCRITA=true)"),
     );
   }
 

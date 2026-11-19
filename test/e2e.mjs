@@ -5,8 +5,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 // Datas no formato real da REST do Hubsoft: "dd/mm/aaaa"
+// datas relativas ao "hoje" de Brasília (o mesmo fuso que o servidor usa)
+const hojeBR = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+const dia = (n) => new Date(Date.parse(`${hojeBR}T12:00:00Z`) + n * 864e5);
 const br = (d) => d.toISOString().slice(0, 10).split("-").reverse().join("/");
-const dia = (n) => new Date(Date.now() + n * 864e5);
 const endereco = { completo: "RUA X, 1 - BAIRRO, CIDADE/UF", cep: "00000000", cidade: "CIDADE", uf: "UF" };
 const faturaReal = (id, venc, status) => ({
   id_fatura: id, quitado: false, status, valor: 115.4, data_vencimento: br(venc), data_pagamento: null,

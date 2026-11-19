@@ -64,9 +64,14 @@ Alguns provedores têm mais de uma base Hubsoft (ex.: `base_pf`, `base_pj`, `bas
 
 ## Ações que alteram dados
 
-`desbloqueio_confianca` e `enviar_fatura_email` só existem com `HUBSOFT_READ_ONLY=false`. Antes de executar:
-1. confirme cliente, serviço (`id_cliente_servico`) e quantidade de dias com o usuário;
-2. execute uma única vez e relate o retorno do Hubsoft. O limite de dias do desbloqueio é definido no painel do provedor.
+Só existem com `HUBSOFT_PERMITIR_ESCRITA=true`: `desbloqueio_confianca`, `enviar_fatura_email` e as ferramentas de CPE (`configurar_autenticacao`, `vincular_cpe`, `desvincular_cpe`, `reiniciar_cpe`, `restaurar_cpe`, `cpe_gerenciar`). Fluxo obrigatório:
+
+1. Passe `servidor` com **uma** base: a base onde o cliente foi encontrado.
+2. Chame **sem** `confirmar`, que é a simulação. Mostre ao usuário o estado atual, a requisição, o efeito esperado e os avisos (CPE vinculada a outro serviço, `phy_addr` fora do inventário, serviço cancelado, rollback).
+3. Só com aprovação explícita do usuário, repita com `confirmar=true` e mostre o `diff`.
+4. Se der erro, mostre `http_status` e `resposta.msg` como vieram. Não tente de novo por conta própria; num 429, espere `retry_after`.
+
+Vincular ONU já autorizada sem desprovisionar: `configurar_autenticacao` (phy_addr e, se preciso, `id_interface_conexao`), depois `vincular_cpe`. O Hubsoft preenche OLT, PON e roteamento sozinho; confira no diff. `restaurar_cpe` apaga PPPoE e Wi-Fi da CPE e exige `confirmar_phy_addr`. Para Wi-Fi, leia antes com `cpe_iniciar_gerenciamento` e use os mesmos prefixos em `cpe_gerenciar`.
 
 ## Privacidade (LGPD)
 

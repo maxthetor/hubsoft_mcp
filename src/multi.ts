@@ -19,9 +19,36 @@ export function diagnosticoVariaveis(): string[] {
 
 const TODOS = new Set(["", "todos", "todas", "all", "*"]);
 
+/** Leituras que mesmo assim exigem uma única base (ex.: abrir gerenciamento ACS de uma CPE). */
+const UMA_BASE_LEITURA = new Set(["hubsoft_cpe_iniciar_gerenciamento"]);
+
 /** Ferramentas que alteram dados: exigem exatamente um servidor (IDs não valem entre bases). */
 function exigeUmServidor(t: ToolDef) {
-  return t.config.annotations?.readOnlyHint === false && t.name !== "hubsoft_graphql";
+  return (t.config.annotations?.readOnlyHint === false && t.name !== "hubsoft_graphql") || UMA_BASE_LEITURA.has(t.name);
+}
+
+/**
+ * Resolução ESTRITA para ferramentas de uma base só: o parâmetro é obrigatório, deve ser o
+ * nome exato de UMA base; "todos", listas, vazio e busca pela descrição são recusados.
+ */
+export function resolverUmaBase(servers: HubsoftConfig[], pedido?: string): HubsoftConfig {
+  const lista = descreverServidores(servers);
+  const termo = (pedido ?? "").trim();
+  if (!termo) throw new Error(`O parâmetro servidor é obrigatório nesta ferramenta: informe UMA base (${lista}).`);
+  if (TODOS.has(termo.toLowerCase()) || termo.includes(",")) {
+    throw new Error(`Esta ferramenta age em UMA base por vez: "todos" e listas não são aceitos. Bases: ${lista}.`);
+  }
+  const s = servers.find((x) => x.nome === normalizarNome(termo));
+  if (!s) throw new Error(`Servidor "${termo}" não encontrado. Use o nome exato de uma base: ${lista}.`);
+  return s;
+}
+
+/** Repassa a resposta de uma base acrescentando o nome dela, preservando isError. */
+function comServidor(nome: string, r: { content: { type: "text"; text: string }[]; isError?: boolean }, max: number) {
+  const d = parse(r.content.map((c) => c.text).join("\n"));
+  const corpo = d && typeof d === "object" && !Array.isArray(d) ? { servidor: nome, ...d } : { servidor: nome, resultado: d };
+  const saida = ok(corpo, max);
+  return r.isError ? { ...saida, isError: true } : saida;
 }
 
 function rotulo(s: HubsoftConfig) {
@@ -155,7 +182,33 @@ export function collectMultiTools(servers: HubsoftConfig[]): ToolDef[] {
   };
 
   if (servers.length === 1) {
-    return [toolServidores, ...collectTools(clientes.get(servers[0].nome)!)];
+    const unico = servers[0];
+    return [
+      toolServidores,
+      ...collectTools(clientes.get(unico.nome)!).map((t): ToolDef => {
+        if (!exigeUmServidor(t)) return t;
+        // Mesmo com uma base só, ações de escrita/ACS exigem o servidor explícito.
+        return {
+          ...t,
+          config: {
+            ...t.config,
+            inputSchema: {
+              servidor: z.string().describe(`Obrigatório: a base onde executar (${rotulo(unico)}).`),
+              ...(t.config.inputSchema ?? {}),
+            },
+          },
+          cb: async (args: any) => {
+            try {
+              const { servidor, ...resto } = args ?? {};
+              resolverUmaBase(servers, servidor);
+              return comServidor(unico.nome, await t.cb(resto), max);
+            } catch (e) {
+              return fail(e);
+            }
+          },
+        };
+      }),
+    ];
   }
 
   // Ferramentas de cada servidor, com limite de tamanho só no resultado agregado.
@@ -172,14 +225,12 @@ export function collectMultiTools(servers: HubsoftConfig[]): ToolDef[] {
   const combinadas = nomes.map((name): ToolDef => {
     const base = [...porServidor.values()].flat().find((d) => d.name === name)!;
     const umSo = exigeUmServidor(base);
-    const servidorParam = z
-      .string()
-      .optional()
-      .describe(
-        umSo
-          ? `Obrigatório: a base onde executar (${lista}).`
-          : `Base(s) a consultar: nome, lista separada por vírgula ou "todos" (padrão). Bases: ${lista}.`,
-      );
+    const servidorParam = umSo
+      ? z.string().describe(`Obrigatório: UMA base onde executar, pelo nome exato (${lista}). "todos" e listas são recusados.`)
+      : z
+          .string()
+          .optional()
+          .describe(`Base(s) a consultar: nome, lista separada por vírgula ou "todos" (padrão). Bases: ${lista}.`);
     return {
       name,
       config: {
@@ -194,10 +245,18 @@ export function collectMultiTools(servers: HubsoftConfig[]): ToolDef[] {
       cb: async (args: any) => {
         try {
           const { servidor, ...resto } = args ?? {};
-          const alvos = resolverServidores(servers, servidor);
-          if (umSo && alvos.length !== 1) {
-            throw new Error(`Esta ação altera dados: informe uma única base no parâmetro servidor (${lista}).`);
+          if (umSo) {
+            const alvo = resolverUmaBase(servers, servidor);
+            const def = porServidor.get(alvo.nome)!.find((d) => d.name === name);
+            if (!def) {
+              throw new Error(
+                `[${alvo.nome}] ferramenta indisponível nesta base` +
+                  (base.config.annotations?.readOnlyHint === false ? " (escrita não habilitada: HUBSOFT_PERMITIR_ESCRITA)." : "."),
+              );
+            }
+            return comServidor(alvo.nome, await def.cb(resto), max);
           }
+          const alvos = resolverServidores(servers, servidor);
 
           const resultados = await Promise.all(
             alvos.map(async (s) => {

@@ -20,8 +20,13 @@ export interface HubsoftConfig {
   clientSecret: string;
   username: string;
   password: string;
-  /** Quando true (padrão), ferramentas de escrita não são registradas. */
+  /**
+   * Quando true (padrão), ferramentas de escrita não são registradas.
+   * É o inverso de HUBSOFT_PERMITIR_ESCRITA (global ou por base).
+   */
   readOnly: boolean;
+  /** Arquivo JSONL de auditoria das escritas executadas ("" = desativado). */
+  auditoria: string;
   /** Caminho do endpoint GraphQL (ex.: /graphql/v1). Vazio = desativado. */
   graphqlPath: string;
   /** Tamanho máximo (caracteres) da resposta devolvida ao modelo. */
@@ -82,11 +87,27 @@ interface Bruto {
   usuario?: string;
   senha?: string;
   graphql_path?: string;
+  permitir_escrita?: string;
 }
 
+/** Escrita global: HUBSOFT_PERMITIR_ESCRITA=true (ou o legado HUBSOFT_READ_ONLY=false). */
+function escritaGlobal(): boolean {
+  if (env("HUBSOFT_PERMITIR_ESCRITA") !== undefined) return bool("HUBSOFT_PERMITIR_ESCRITA", false);
+  return !bool("HUBSOFT_READ_ONLY", true);
+}
+
+function simNao(v: string | undefined): boolean | undefined {
+  if (v === undefined) return undefined;
+  return ["1", "true", "sim", "yes", "on"].includes(v.trim().toLowerCase());
+}
+
+export const AUDITORIA_PADRAO = join(homedir(), ".config", "hubsoft", "auditoria.jsonl");
+
 function globais() {
+  const aud = env("HUBSOFT_AUDITORIA");
   return {
-    readOnly: bool("HUBSOFT_READ_ONLY", true),
+    readOnly: !escritaGlobal(),
+    auditoria: aud === undefined ? AUDITORIA_PADRAO : aud.toLowerCase() === "off" ? "" : aud,
     maxResponseChars: Number(env("HUBSOFT_MAX_RESPONSE_CHARS") ?? 60000),
     exposeSecrets: bool("HUBSOFT_EXPOR_SENHAS", false),
   };
@@ -113,6 +134,7 @@ function lerArquivo(caminho: string): Bruto[] {
     usuario: expandEnv(s.usuario ?? s.username),
     senha: expandEnv(s.senha ?? s.password),
     graphql_path: expandEnv(s.graphql_path),
+    permitir_escrita: s.permitir_escrita === undefined ? undefined : String(s.permitir_escrita),
   }));
 }
 
@@ -129,6 +151,8 @@ function lerSlot(prefixo: string, origem: string): Bruto | undefined {
     usuario: env(`${prefixo}USERNAME`),
     senha: env(`${prefixo}PASSWORD`),
     graphql_path: env(`${prefixo}GRAPHQL_PATH`),
+    // HUBSOFT_PERMITIR_ESCRITA do servidor 1 é a mesma variável global; as numeradas valem por base.
+    permitir_escrita: prefixo === "HUBSOFT_" ? undefined : env(`${prefixo}PERMITIR_ESCRITA`),
   };
 }
 
@@ -188,6 +212,8 @@ export function loadServers(): HubsoftConfig[] {
       password: b.senha!,
       graphqlPath: graphqlPath(b.graphql_path ?? env("HUBSOFT_GRAPHQL_PATH")),
       ...g,
+      // permissão por base sobrepõe a global
+      readOnly: !(simNao(b.permitir_escrita) ?? !g.readOnly),
     };
   });
 }

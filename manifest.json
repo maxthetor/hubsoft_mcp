@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "hubsoft-mcp",
   "display_name": "Hubsoft (não oficial)",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Consulte uma ou várias bases do ERP Hubsoft (clientes, bloqueados, faturas, RADIUS) com as permissões do seu próprio usuário.",
   "long_description": "Servidor MCP não oficial para o Hubsoft, ERP de provedores de internet. Cada pessoa usa o próprio login do Hubsoft; as credenciais ficam só no computador dela. Modo somente leitura por padrão.",
   "author": {
@@ -46,10 +46,11 @@
         "HUBSOFT_3_CLIENT_SECRET": "${user_config.client_secret_3}",
         "HUBSOFT_3_USERNAME": "${user_config.username_3}",
         "HUBSOFT_3_PASSWORD": "${user_config.password_3}",
-        "HUBSOFT_READ_ONLY": "${user_config.read_only}",
         "HUBSOFT_GRAPHQL_PATH": "${user_config.graphql_path}",
         "HUBSOFT_CONFIG": "${user_config.arquivo_servidores}",
-        "HUBSOFT_EXPOR_SENHAS": "${user_config.expor_senhas}"
+        "HUBSOFT_EXPOR_SENHAS": "${user_config.expor_senhas}",
+        "HUBSOFT_PERMITIR_ESCRITA": "${user_config.permitir_escrita}",
+        "HUBSOFT_AUDITORIA": "${user_config.arquivo_auditoria}"
       }
     }
   },
@@ -113,6 +114,34 @@
     {
       "name": "hubsoft_graphql",
       "description": "Executa consulta GraphQL"
+    },
+    {
+      "name": "hubsoft_cpe_iniciar_gerenciamento",
+      "description": "Lê os parâmetros gerenciáveis da CPE via ACS (senhas Wi-Fi mascaradas)"
+    },
+    {
+      "name": "hubsoft_configurar_autenticacao",
+      "description": "ESCRITA: phy_addr, interface, login e senha da autenticação (simulação por padrão)"
+    },
+    {
+      "name": "hubsoft_vincular_cpe",
+      "description": "ESCRITA: vincula a CPE ao serviço; o Hubsoft preenche OLT/PON/BNG (simulação por padrão)"
+    },
+    {
+      "name": "hubsoft_desvincular_cpe",
+      "description": "ESCRITA destrutiva: desvincula CPE(s) do serviço, com rollback sugerido"
+    },
+    {
+      "name": "hubsoft_reiniciar_cpe",
+      "description": "CONTROLE: reinicia a CPE (simulação por padrão)"
+    },
+    {
+      "name": "hubsoft_restaurar_cpe",
+      "description": "CONTROLE destrutivo: restaura a CPE para fábrica (exige confirmar_phy_addr)"
+    },
+    {
+      "name": "hubsoft_cpe_gerenciar",
+      "description": "ESCRITA: altera parâmetros da CPE via ACS (Wi-Fi etc.)"
     }
   ],
   "user_config": {
@@ -250,13 +279,6 @@
       "sensitive": true,
       "required": false
     },
-    "read_only": {
-      "type": "boolean",
-      "title": "Somente leitura",
-      "description": "Desmarque para habilitar desbloqueio em confiança e envio de faturas",
-      "default": true,
-      "required": false
-    },
     "graphql_path": {
       "type": "string",
       "title": "Caminho GraphQL",
@@ -275,6 +297,20 @@
       "title": "Mostrar senhas (PPPoE)",
       "description": "Por padrão, senhas retornadas pelo Hubsoft são mascaradas",
       "default": false,
+      "required": false
+    },
+    "permitir_escrita": {
+      "type": "boolean",
+      "title": "Permitir escrita (todas as bases)",
+      "description": "Habilita desbloqueio, envio de fatura e as ferramentas de CPE. Sempre começam em simulação. Por base: use servidores.json",
+      "default": false,
+      "required": false
+    },
+    "arquivo_auditoria": {
+      "type": "string",
+      "title": "Arquivo de auditoria (opcional)",
+      "description": "JSONL das escritas executadas. Padrão: ~/.config/hubsoft/auditoria.jsonl; off desativa",
+      "default": "",
       "required": false
     }
   },
