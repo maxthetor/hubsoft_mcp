@@ -4,6 +4,7 @@ import { loadServers } from "./config.js";
 import { collectMultiTools, diagnosticoVariaveis, instrucoesServidores } from "./multi.js";
 import { setExposeSecrets } from "./util.js";
 import { VERSION } from "./version.js";
+import { configurarPerguntador } from "./dialogo2fa.js";
 
 export const INSTRUCTIONS =
   "Ferramentas para o ERP Hubsoft (provedores de internet). As chamadas usam o login " +
@@ -21,8 +22,9 @@ export const INSTRUCTIONS =
   "Faturas com status 'aguardando' e vencimento futuro (ex.: parcelas de carnê) não estão vencidas. " +
   "Senhas (ex.: PPPoE) são mascaradas por padrão. " +
   "Dados de clientes são pessoais (LGPD): mostre apenas o necessário. " +
-  "Se uma ferramenta falhar na autenticação e o usuário tiver 2FA, peça a ele o código de 6 dígitos " +
-  "do app autenticador e chame hubsoft_conectar (servidor + codigo_2fa); nunca invente um código. " +
+  "Quando o login exige 2FA, o próprio MCP abre uma janela pedindo o código ao usuário. Se mesmo assim " +
+  "falhar (janela cancelada ou indisponível), peça o código de 6 dígitos do app autenticador e chame " +
+  "hubsoft_conectar (servidor + codigo_2fa); nunca invente um código. " +
   "O token fica salvo, então isso só é preciso no primeiro acesso. " +
   "Antes de qualquer ação que altere dados, confirme cliente e serviço com o usuário. " +
   "Ferramentas de escrita/controle de CPE (configurar_autenticacao, vincular/desvincular_cpe, " +
@@ -42,6 +44,32 @@ async function main() {
   for (const t of collectMultiTools(servers)) server.registerTool(t.name, t.config as any, t.cb as any);
 
   await server.connect(new StdioServerTransport());
+
+  // 2FA via MCP elicitation, quando o cliente suporta (a janela nativa é tentada antes).
+  configurarPerguntador(
+    async (i) => {
+      if (!server.server.getClientCapabilities()?.elicitation) return undefined;
+      const r = await server.server.elicitInput(
+        {
+          mode: "form",
+          message:
+            (i.erro ? `${i.erro} ` : "") +
+            `Hubsoft (${i.base} – ${i.host}): digite o código do app autenticador para ${i.usuario}. ` +
+            "O token fica salvo; o código não será pedido de novo.",
+          requestedSchema: {
+            type: "object",
+            properties: {
+              codigo: { type: "string", title: "Código 2FA", description: "6 dígitos do app autenticador", minLength: 6, maxLength: 8 },
+            },
+            required: ["codigo"],
+          },
+        } as any,
+        { timeout: 120_000 },
+      );
+      return r.action === "accept" ? String((r.content as any)?.codigo ?? "") : undefined;
+    },
+    { antesDaJanela: false, nome: "elicitation" },
+  );
   // stdout é do protocolo MCP; logs vão para stderr
   console.error(
     `hubsoft-mcp ${VERSION}: ${servers.length} servidor(es) — ` +

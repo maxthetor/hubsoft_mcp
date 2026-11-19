@@ -7,6 +7,9 @@ import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { totp, normalizarSemente } from "../dist/tokens.js";
+import { writeFileSync } from "node:fs";
+import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { pathToFileURL } from "node:url";
 
 // 1) TOTP: vetor da RFC 6238 (semente ASCII "12345678901234567890", t=59 s)
 const RFC = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
@@ -48,9 +51,11 @@ const TOK = join(dir, "tokens.json");
 const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("HUBSOFT_")));
 const cred = { HUBSOFT_NOME: "base_pf", HUBSOFT_URL: URL_, HUBSOFT_CLIENT_ID: "145", HUBSOFT_CLIENT_SECRET: "s", HUBSOFT_USERNAME: "marcelo", HUBSOFT_PASSWORD: "p" };
 
-async function conectar(env) {
-  const t = new StdioClientTransport({ command: "node", args: ["server/hubsoft-mcp.mjs"], stderr: "pipe", env: { ...baseEnv, HUBSOFT_TOKENS: TOK, ...cred, ...env } });
-  const c = new Client({ name: "auth", version: "0" }); await c.connect(t); return c;
+async function conectar(env, elicitar) {
+  const t = new StdioClientTransport({ command: "node", args: ["server/hubsoft-mcp.mjs"], stderr: "pipe", env: { ...baseEnv, HUBSOFT_TOKENS: TOK, HUBSOFT_2FA_DIALOGO: "off", ...cred, ...env } });
+  const c = new Client({ name: "auth", version: "0" }, elicitar ? { capabilities: { elicitation: { form: {} } } } : undefined);
+  if (elicitar) c.setRequestHandler(ElicitRequestSchema, elicitar);
+  await c.connect(t); return c;
 }
 const call = async (c, name, args) => {
   const r = await c.callTool({ name, arguments: args });
@@ -77,7 +82,7 @@ assert.equal(r.err, true); assert.match(r.text, /2FA recusado/);
 r = await call(c, "hubsoft_conectar", { servidor: "base_pf", codigo_2fa: totp(SEMENTE) });
 assert.equal(r.err, false, r.text);
 assert.equal(r.json.ok, true); assert.equal(r.json.refresh_token_salvo, true); assert.equal(r.json.token_valido, true);
-assert.ok(!/A\d|R\d/.test(JSON.stringify(r.json).replace(/arquivo_tokens.*?,/, "")), "não expõe tokens");
+assert.ok(!/"[AR]\d+"/.test(r.text), "não expõe tokens");
 r = await consulta(c);
 assert.equal(r.err, false, r.text);
 await c.close();
@@ -140,6 +145,64 @@ assert.equal(r.json.arquivo_tokens, "desativado (só memória)");
 r = await consulta(c);
 assert.equal(r.err, false, r.text);
 assert.ok(!existsSync(TOK2));
+await c.close();
+
+// 10) Comando externo (ex.: gerenciador de senhas): código obtido sozinho no 401
+const script = join(dir, "otp.mjs");
+writeFileSync(script, `import { totp } from ${JSON.stringify(pathToFileURL(join(process.cwd(), "dist/tokens.js")).href)};
+if (process.env.HUBSOFT_2FA_BASE !== "base_pf") process.exit(2);
+console.log("código: " + (process.argv[2] === "errado" ? "000000" : totp(${JSON.stringify(SEMENTE)})));`);
+const TOK3 = join(dir, "t3.json");
+antes = grants.length;
+c = await conectar({ HUBSOFT_TOKENS: TOK3, HUBSOFT_2FA_DIALOGO: "auto", HUBSOFT_2FA_COMANDO: `node "${script}"` });
+r = await consulta(c);
+assert.equal(r.err, false, r.text);
+assert.deepEqual(grants.slice(antes), ["password", "password+otp"]);
+assert.ok(JSON.parse(readFileSync(TOK3, "utf8"))[chave].refresh_token);
+r = await call(c, "hubsoft_servidores", {});
+assert.match(r.json[0].autenticacao.pedido_2fa, /^comando/);
+await c.close();
+
+// 11) Código recusado 3 vezes: erro claro, sem loop infinito
+antes = grants.length;
+c = await conectar({ HUBSOFT_TOKENS: "off", HUBSOFT_2FA_DIALOGO: "auto", HUBSOFT_2FA_COMANDO: `node "${script}" errado` });
+r = await consulta(c);
+assert.equal(r.err, true); assert.match(r.text, /3 tentativas/);
+assert.deepEqual(grants.slice(antes), ["password", "password+otp", "password+otp", "password+otp"]);
+await c.close();
+
+// 12) Elicitation (Claude Code CLI, VS Code…): formulário pede o código; chamadas paralelas perguntam uma vez só
+let pedidos = [];
+c = await conectar({ HUBSOFT_TOKENS: "off", HUBSOFT_2FA_DIALOGO: "elicitation" }, async (req) => {
+  pedidos.push(req.params.message);
+  assert.deepEqual(req.params.requestedSchema.required, ["codigo"]);
+  return { action: "accept", content: { codigo: totp(SEMENTE) } };
+});
+const [a1, a2] = await Promise.all([consulta(c), consulta(c)]);
+assert.equal(a1.err, false, a1.text); assert.equal(a2.err, false, a2.text);
+assert.equal(pedidos.length, 1); assert.match(pedidos[0], /base_pf/); assert.match(pedidos[0], /marcelo/);
+r = await call(c, "hubsoft_servidores", {});
+assert.equal(r.json[0].autenticacao.pedido_2fa, "elicitation");
+await c.close();
+
+// 13) Usuário cancela: erro com a dica e não pergunta de novo logo em seguida
+pedidos = [];
+c = await conectar({ HUBSOFT_TOKENS: "off", HUBSOFT_2FA_DIALOGO: "elicitation" }, async (req) => { pedidos.push(1); return { action: "cancel" }; });
+r = await consulta(c);
+assert.equal(r.err, true); assert.match(r.text, /hubsoft_conectar/);
+r = await consulta(c);
+assert.equal(r.err, true);
+assert.equal(pedidos.length, 1, "após cancelar, espera antes de perguntar de novo");
+// hubsoft_conectar com código continua funcionando mesmo na espera
+r = await call(c, "hubsoft_conectar", { servidor: "base_pf", codigo_2fa: totp(SEMENTE) });
+assert.equal(r.err, false, r.text);
+await c.close();
+
+// 14) Modo off: nunca pergunta
+pedidos = [];
+c = await conectar({ HUBSOFT_TOKENS: "off", HUBSOFT_2FA_DIALOGO: "off" }, async () => { pedidos.push(1); return { action: "accept", content: { codigo: totp(SEMENTE) } }; });
+r = await consulta(c);
+assert.equal(r.err, true); assert.equal(pedidos.length, 0);
 await c.close();
 
 srv.close();

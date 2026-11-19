@@ -33,7 +33,8 @@
         "HUBSOFT_AUDITORIA": "${user_config.arquivo_auditoria}",
         "HUBSOFT_OTP_SECRET": "${user_config.otp_secret}",
         "HUBSOFT_2_OTP_SECRET": "${user_config.otp_secret_2}",
-        "HUBSOFT_3_OTP_SECRET": "${user_config.otp_secret_3}"
+        "HUBSOFT_3_OTP_SECRET": "${user_config.otp_secret_3}",
+        "HUBSOFT_2FA_COMANDO": "${user_config.comando_2fa}"
       }
     }
   }

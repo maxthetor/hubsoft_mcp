@@ -1,7 +1,7 @@
 {
   "name": "hubsoft",
   "displayName": "Hubsoft (não oficial)",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Consulte uma ou várias bases do ERP Hubsoft com as permissões do seu próprio usuário: clientes, bloqueados, PPPoE, ONU, RADIUS, faturas, atendimentos e OS.",
   "author": {
     "name": "Marcelo",
@@ -199,6 +199,12 @@
       "type": "string",
       "title": "Arquivo de auditoria (opcional)",
       "description": "JSONL das escritas executadas. Padrão: ~/.config/hubsoft/auditoria.jsonl; off desativa",
+      "required": false
+    },
+    "comando_2fa": {
+      "type": "string",
+      "title": "Comando que fornece o código 2FA (opcional)",
+      "description": "Ex.: op item get \"Hubsoft\" --otp. Recebe HUBSOFT_2FA_BASE/HOST/USUARIO. Sem ele, uma janela pede o código quando necessário",
       "required": false
     }
   },

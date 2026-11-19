@@ -5,7 +5,7 @@ O administrador do provedor cria no Hubsoft:
 1. um **cliente de API** (client ID e client secret), com "Permite acesso à API GraphQL" marcado;
 2. para cada pessoa, um **usuário com acesso à API**.
 
-> Usuários com **2FA**: no primeiro acesso, rode `hubsoft conectar --servidor <base> --codigo_2fa <código do app>`. O token e o refresh ficam em `~/.config/hubsoft/tokens.json` e são renovados sozinhos. Alternativa sem interação: `HUBSOFT_OTP_SECRET` com a semente TOTP.
+> Usuários com **2FA**: no primeiro acesso a CLI pergunta o código no terminal (ou abre uma janela). Também dá para rodar `hubsoft conectar --servidor <base> --codigo_2fa <código do app>`. O token e o refresh ficam em `~/.config/hubsoft/tokens.json` e são renovados sozinhos. Alternativa sem interação: `HUBSOFT_OTP_SECRET` com a semente TOTP.
 
 ## Variáveis
 
@@ -17,6 +17,8 @@ O administrador do provedor cria no Hubsoft:
 | `HUBSOFT_USERNAME` | sim | Usuário de API da pessoa |
 | `HUBSOFT_PASSWORD` | sim | Senha |
 | `HUBSOFT_OTP_SECRET` | não | Semente 2FA (base32 ou otpauth://) para gerar o código sozinho |
+| `HUBSOFT_2FA_DIALOGO` | não | `auto` (padrão), `janela`, `elicitation` ou `off` |
+| `HUBSOFT_2FA_COMANDO` | não | Comando que imprime o código 2FA (ex.: `op item get "Hubsoft" --otp`) |
 | `HUBSOFT_TOKENS` | não | Arquivo dos tokens salvos (padrão `~/.config/hubsoft/tokens.json`; `off` = só memória) |
 | `HUBSOFT_PERMITIR_ESCRITA` | não | `true` habilita as ferramentas de escrita/CPE (padrão: desligado). Por base: `HUBSOFT_2_PERMITIR_ESCRITA` ou `"permitir_escrita": true` no servidores.json |
 | `HUBSOFT_AUDITORIA` | não | Log JSONL das escritas (padrão `~/.config/hubsoft/auditoria.jsonl`; `off` desativa) |

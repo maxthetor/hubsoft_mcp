@@ -87,7 +87,7 @@ const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !
 const cred = (pre) => ({ [`${pre}URL`]: URL_, [`${pre}CLIENT_ID`]: "1", [`${pre}CLIENT_SECRET`]: "SEGREDO-CLIENTE", [`${pre}USERNAME`]: "u", [`${pre}PASSWORD`]: "SENHA-API" });
 
 async function conectar(env) {
-  const t = new StdioClientTransport({ command: "node", args: ["server/hubsoft-mcp.mjs"], stderr: "pipe", env: { ...baseEnv, HUBSOFT_TOKENS: "off", HUBSOFT_AUDITORIA: AUD, ...env } });
+  const t = new StdioClientTransport({ command: "node", args: ["server/hubsoft-mcp.mjs"], stderr: "pipe", env: { ...baseEnv, HUBSOFT_TOKENS: "off", HUBSOFT_2FA_DIALOGO: "off", HUBSOFT_AUDITORIA: AUD, ...env } });
   const c = new Client({ name: "cpe", version: "0" }); await c.connect(t); return c;
 }
 const call = async (c, name, args) => {

@@ -1,5 +1,6 @@
 import type { HubsoftConfig } from "./config.js";
 import { TokenStore, chaveToken, totp, type TokenSalvo } from "./tokens.js";
+import { comTrava, emEspera, limparCancelado, marcarCancelado, meiosDisponiveis, pedirCodigo } from "./dialogo2fa.js";
 
 export class HubsoftError extends Error {
   constructor(
@@ -24,7 +25,7 @@ type Query = Record<string, string | number | boolean | undefined | null>;
 const MARGEM_MS = 5 * 60_000;
 
 export const DICA_2FA =
-  "Se este usuário usa 2FA, faça o primeiro login com a ferramenta hubsoft_conectar " +
+  "Se este usuário usa 2FA e nenhuma janela pedindo o código apareceu (ou foi cancelada), faça o primeiro login com a ferramenta hubsoft_conectar " +
   "(servidor + codigo_2fa do app autenticador) ou configure a semente em HUBSOFT_OTP_SECRET. " +
   "Depois disso o token fica salvo e é renovado sozinho.";
 
@@ -149,7 +150,56 @@ export class HubsoftClient {
     if (this.cfg.otpSecret) extra.one_time_password = totp(this.cfg.otpSecret);
     const r = await this.pedirToken(extra);
     if (r.body?.access_token) return this.guardar(r.body);
+    // 4) 401 sem semente: pede o código ao usuário (janela, elicitation ou comando)
+    if (r.res.status === 401 && !this.cfg.otpSecret) {
+      const t = await this.loginInterativo();
+      if (t) return t;
+    }
     throw this.falha(r.res, r.body, !!this.cfg.otpSecret);
+  }
+
+  /** Pede o código 2FA (até 3 tentativas). undefined = cancelado ou sem meio interativo. */
+  private loginInterativo(): Promise<TokenState | undefined> {
+    if (emEspera(this.chave)) return Promise.resolve(undefined);
+    return comTrava(async () => {
+      // enquanto esperava a vez, outro cliente do processo pode ter conectado esta base
+      const salvo = this.store.get(this.chave);
+      if (salvo?.access_token && Date.now() < salvo.expires_at - MARGEM_MS) return this.estado(salvo);
+      if (emEspera(this.chave)) return undefined;
+      let erro: string | undefined;
+      for (let tentativa = 1; tentativa <= 3; tentativa++) {
+        const codigo = await pedirCodigo({
+          base: this.cfg.nome,
+          host: new URL(this.cfg.baseUrl).host,
+          usuario: this.cfg.username,
+          tentativa,
+          erro,
+        });
+        if (!codigo) {
+          // só marca espera se houve uma pergunta de fato (usuário cancelou)
+          if (tentativa > 1 || this.ultimoPedidoTeveMeio()) marcarCancelado(this.chave);
+          return undefined;
+        }
+        const r = await this.pedirToken({ one_time_password: codigo });
+        if (r.body?.access_token) {
+          limparCancelado(this.chave);
+          return this.guardar(r.body);
+        }
+        if (r.res.status === 429) throw this.falha(r.res, r.body, false);
+        erro =
+          `Código recusado pelo Hubsoft (HTTP ${r.res.status}). Use o código atual do app` +
+          (tentativa === 2 ? ". Se continuar recusando, o problema pode ser a senha ou o client_id." : ".");
+      }
+      throw new HubsoftError(
+        "Login recusado mesmo com o código 2FA (3 tentativas). Confira a senha, o client_id/client_secret " +
+          "e se o client está liberado para este usuário no Hubsoft.",
+        401,
+      );
+    });
+  }
+
+  private ultimoPedidoTeveMeio() {
+    return meiosDisponiveis().length > 0;
   }
 
   private async getToken(force = false): Promise<string> {
@@ -201,6 +251,7 @@ export class HubsoftClient {
       refresh_token_salvo: !!t?.refresh_token,
       refresh_emitido_em: t?.refresh_emitido_em ?? null,
       codigo_2fa_automatico: !!this.cfg.otpSecret,
+      pedido_2fa: this.cfg.otpSecret ? "semente" : meiosDisponiveis().join(" → ") || "nenhum (use hubsoft_conectar)",
       arquivo_tokens: this.cfg.tokens || "desativado (só memória)",
     };
   }

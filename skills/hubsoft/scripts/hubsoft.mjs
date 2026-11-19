@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// hubsoft-mcp 0.8.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
+// hubsoft-mcp 0.9.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
 // Arquivo gerado por scripts/bundle.mjs a partir de src/. Não edite.
 import { createRequire as __cr } from "node:module"; const require = __cr(import.meta.url);
 var __defProp = Object.defineProperty;
@@ -19977,6 +19977,159 @@ function loadEnvFiles(files) {
   return loaded;
 }
 
+// src/dialogo2fa.ts
+import { spawn, spawnSync } from "node:child_process";
+var TEMPO_LIMITE_MS = 12e4;
+var ESPERA_CANCELADO_MS = 10 * 6e4;
+var interativo;
+function configurarPerguntador(fn, opts) {
+  interativo = { fn, ...opts };
+}
+function modo() {
+  const v = (process.env.HUBSOFT_2FA_DIALOGO ?? "").trim().toLowerCase();
+  return ["auto", "janela", "elicitation", "off"].includes(v) ? v : "auto";
+}
+function extrairCodigo(s) {
+  return s?.match(/\b\d{6,8}\b/)?.[0];
+}
+function textos(i) {
+  const titulo = `Hubsoft \u2013 c\xF3digo 2FA (${i.base})`;
+  const msg = (i.erro ? `${i.erro}
+
+` : "") + `Digite o c\xF3digo do app autenticador para ${i.usuario} em ${i.host}.
+O token fica salvo; este c\xF3digo n\xE3o ser\xE1 pedido de novo.`;
+  return { titulo, msg };
+}
+function executar(cmd, args, env2, shell = false) {
+  return new Promise((resolve) => {
+    let out2 = "";
+    let p;
+    try {
+      p = spawn(cmd, args, { env: { ...process.env, ...env2 }, windowsHide: true, shell, stdio: ["ignore", "pipe", "ignore"] });
+    } catch {
+      return resolve({ code: -1, out: "" });
+    }
+    const t = setTimeout(() => p.kill(), TEMPO_LIMITE_MS);
+    p.stdout.on("data", (d) => out2 += d);
+    p.on("error", () => {
+      clearTimeout(t);
+      resolve({ code: -1, out: "" });
+    });
+    p.on("close", (code) => {
+      clearTimeout(t);
+      resolve({ code, out: out2 });
+    });
+  });
+}
+var PS = String.raw`
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+[System.Windows.Forms.Application]::EnableVisualStyles()
+$f = New-Object System.Windows.Forms.Form
+$f.Text = $env:HS2FA_TITULO
+$f.ClientSize = New-Object System.Drawing.Size(420, 170)
+$f.StartPosition = 'CenterScreen'; $f.TopMost = $true
+$f.FormBorderStyle = 'FixedDialog'; $f.MaximizeBox = $false; $f.MinimizeBox = $false
+$l = New-Object System.Windows.Forms.Label; $l.Text = $env:HS2FA_MSG; $l.SetBounds(12, 10, 396, 72)
+$t = New-Object System.Windows.Forms.TextBox; $t.SetBounds(12, 86, 396, 30); $t.MaxLength = 8
+$t.Font = New-Object System.Drawing.Font('Consolas', 16)
+$ok = New-Object System.Windows.Forms.Button; $ok.Text = 'Conectar'; $ok.SetBounds(232, 130, 85, 28); $ok.DialogResult = 'OK'
+$c = New-Object System.Windows.Forms.Button; $c.Text = 'Cancelar'; $c.SetBounds(323, 130, 85, 28); $c.DialogResult = 'Cancel'
+$f.AcceptButton = $ok; $f.CancelButton = $c
+$f.Controls.AddRange(@($l, $t, $ok, $c))
+$f.Add_Shown({ $f.Activate(); $t.Focus() })
+if ($f.ShowDialog() -eq 'OK') { [Console]::Out.Write($t.Text) }
+`;
+var OSA = [
+  'set r to display dialog (system attribute "HS2FA_MSG") default answer "" with title (system attribute "HS2FA_TITULO") buttons {"Cancelar", "Conectar"} default button "Conectar" cancel button "Cancelar" with icon note giving up after 120',
+  "text returned of r"
+];
+function temComando(c) {
+  return spawnSync("sh", ["-c", `command -v ${c}`], { stdio: "ignore" }).status === 0;
+}
+function janelaDisponivel() {
+  if (process.platform === "win32") return "windows";
+  if (process.platform === "darwin") return "macos";
+  if (process.platform === "linux" && (process.env.DISPLAY || process.env.WAYLAND_DISPLAY)) {
+    if (temComando("zenity")) return "zenity";
+    if (temComando("kdialog")) return "kdialog";
+  }
+  return void 0;
+}
+async function janela(i) {
+  const tipo = janelaDisponivel();
+  const { titulo, msg } = textos(i);
+  const env2 = { HS2FA_TITULO: titulo, HS2FA_MSG: msg };
+  let r;
+  if (tipo === "windows") {
+    const enc = Buffer.from(PS, "utf16le").toString("base64");
+    r = await executar("powershell.exe", ["-NoProfile", "-NonInteractive", "-STA", "-ExecutionPolicy", "Bypass", "-EncodedCommand", enc], env2);
+  } else if (tipo === "macos") {
+    r = await executar("osascript", OSA.flatMap((l) => ["-e", l]), env2);
+  } else if (tipo === "zenity") {
+    r = await executar("zenity", ["--entry", `--title=${titulo}`, `--text=${msg}`, "--timeout=120"], env2);
+  } else if (tipo === "kdialog") {
+    r = await executar("kdialog", ["--title", titulo, "--inputbox", msg], env2);
+  } else return void 0;
+  return r.code === 0 ? extrairCodigo(r.out) : void 0;
+}
+async function comandoExterno(i) {
+  const cmd = process.env.HUBSOFT_2FA_COMANDO?.trim();
+  if (!cmd || /^\$\{[^}]+\}$/.test(cmd)) return void 0;
+  const r = await executar(cmd, [], { HUBSOFT_2FA_BASE: i.base, HUBSOFT_2FA_HOST: i.host, HUBSOFT_2FA_USUARIO: i.usuario }, true);
+  return r.code === 0 ? extrairCodigo(r.out) : void 0;
+}
+function meiosDisponiveis() {
+  const m = modo();
+  if (m === "off") return [];
+  const lista = [];
+  const cmd = process.env.HUBSOFT_2FA_COMANDO?.trim();
+  if (m === "auto" && cmd && !/^\$\{[^}]+\}$/.test(cmd)) lista.push("comando");
+  if (interativo?.antesDaJanela && m === "auto") lista.push(interativo.nome);
+  if ((m === "auto" || m === "janela") && janelaDisponivel()) lista.push(`janela (${janelaDisponivel()})`);
+  if (interativo && !interativo.antesDaJanela && (m === "auto" || m === "elicitation")) lista.push(interativo.nome);
+  return lista;
+}
+async function pedirCodigo(i) {
+  const m = modo();
+  if (m === "off") return void 0;
+  const tentativas = [];
+  if (m === "auto") tentativas.push(() => comandoExterno(i));
+  if (interativo?.antesDaJanela && m === "auto") tentativas.push(() => interativo.fn(i));
+  if ((m === "auto" || m === "janela") && janelaDisponivel()) {
+    tentativas.push(async () => await janela(i) ?? CANCELOU);
+  }
+  if (interativo && !interativo.antesDaJanela && (m === "auto" || m === "elicitation")) tentativas.push(() => interativo.fn(i));
+  for (const t of tentativas) {
+    try {
+      const c = await t();
+      if (c === CANCELOU) return void 0;
+      const cod = extrairCodigo(c);
+      if (cod) return cod;
+    } catch {
+    }
+  }
+  return void 0;
+}
+var CANCELOU = "\0cancelou";
+var fila = Promise.resolve();
+var canceladoAte = /* @__PURE__ */ new Map();
+function comTrava(fn) {
+  const r = fila.then(fn, fn);
+  fila = r.catch(() => void 0);
+  return r;
+}
+function emEspera(chave2) {
+  const ate = canceladoAte.get(chave2);
+  return !!ate && Date.now() < ate;
+}
+function marcarCancelado(chave2) {
+  canceladoAte.set(chave2, Date.now() + ESPERA_CANCELADO_MS);
+}
+function limparCancelado(chave2) {
+  canceladoAte.delete(chave2);
+}
+
 // src/client.ts
 var HubsoftError = class extends Error {
   constructor(message, status, body) {
@@ -19989,7 +20142,7 @@ var HubsoftError = class extends Error {
   body;
 };
 var MARGEM_MS = 5 * 6e4;
-var DICA_2FA = "Se este usu\xE1rio usa 2FA, fa\xE7a o primeiro login com a ferramenta hubsoft_conectar (servidor + codigo_2fa do app autenticador) ou configure a semente em HUBSOFT_OTP_SECRET. Depois disso o token fica salvo e \xE9 renovado sozinho.";
+var DICA_2FA = "Se este usu\xE1rio usa 2FA e nenhuma janela pedindo o c\xF3digo apareceu (ou foi cancelada), fa\xE7a o primeiro login com a ferramenta hubsoft_conectar (servidor + codigo_2fa do app autenticador) ou configure a semente em HUBSOFT_OTP_SECRET. Depois disso o token fica salvo e \xE9 renovado sozinho.";
 var HubsoftClient = class {
   constructor(cfg) {
     this.cfg = cfg;
@@ -20085,7 +20238,48 @@ var HubsoftClient = class {
     if (this.cfg.otpSecret) extra.one_time_password = totp(this.cfg.otpSecret);
     const r = await this.pedirToken(extra);
     if (r.body?.access_token) return this.guardar(r.body);
+    if (r.res.status === 401 && !this.cfg.otpSecret) {
+      const t = await this.loginInterativo();
+      if (t) return t;
+    }
     throw this.falha(r.res, r.body, !!this.cfg.otpSecret);
+  }
+  /** Pede o código 2FA (até 3 tentativas). undefined = cancelado ou sem meio interativo. */
+  loginInterativo() {
+    if (emEspera(this.chave)) return Promise.resolve(void 0);
+    return comTrava(async () => {
+      const salvo = this.store.get(this.chave);
+      if (salvo?.access_token && Date.now() < salvo.expires_at - MARGEM_MS) return this.estado(salvo);
+      if (emEspera(this.chave)) return void 0;
+      let erro;
+      for (let tentativa = 1; tentativa <= 3; tentativa++) {
+        const codigo = await pedirCodigo({
+          base: this.cfg.nome,
+          host: new URL(this.cfg.baseUrl).host,
+          usuario: this.cfg.username,
+          tentativa,
+          erro
+        });
+        if (!codigo) {
+          if (tentativa > 1 || this.ultimoPedidoTeveMeio()) marcarCancelado(this.chave);
+          return void 0;
+        }
+        const r = await this.pedirToken({ one_time_password: codigo });
+        if (r.body?.access_token) {
+          limparCancelado(this.chave);
+          return this.guardar(r.body);
+        }
+        if (r.res.status === 429) throw this.falha(r.res, r.body, false);
+        erro = `C\xF3digo recusado pelo Hubsoft (HTTP ${r.res.status}). Use o c\xF3digo atual do app` + (tentativa === 2 ? ". Se continuar recusando, o problema pode ser a senha ou o client_id." : ".");
+      }
+      throw new HubsoftError(
+        "Login recusado mesmo com o c\xF3digo 2FA (3 tentativas). Confira a senha, o client_id/client_secret e se o client est\xE1 liberado para este usu\xE1rio no Hubsoft.",
+        401
+      );
+    });
+  }
+  ultimoPedidoTeveMeio() {
+    return meiosDisponiveis().length > 0;
   }
   async getToken(force = false) {
     if (!force && this.token && Date.now() < this.token.expiresAt) {
@@ -20132,6 +20326,7 @@ var HubsoftClient = class {
       refresh_token_salvo: !!t?.refresh_token,
       refresh_emitido_em: t?.refresh_emitido_em ?? null,
       codigo_2fa_automatico: !!this.cfg.otpSecret,
+      pedido_2fa: this.cfg.otpSecret ? "semente" : meiosDisponiveis().join(" \u2192 ") || "nenhum (use hubsoft_conectar)",
       arquivo_tokens: this.cfg.tokens || "desativado (s\xF3 mem\xF3ria)"
     };
   }
@@ -20709,9 +20904,9 @@ function registerHigiene(server, hs) {
       annotations: { readOnlyHint: true, openWorldHint: true }
     },
     async ({ criterio, limite }) => run(max, async () => {
-      const modo = criterio ?? "vigente";
+      const modo2 = criterio ?? "vigente";
       const lim = limite ?? 1e3;
-      const ativo = (st) => modo === "habilitado" ? st === "servico_habilitado" : !ENCERRADOS.has(st);
+      const ativo = (st) => modo2 === "habilitado" ? st === "servico_habilitado" : !ENCERRADOS.has(st);
       const pagina = (n) => hs.get(`${API}/cliente/todos`, { itens_por_pagina: POR_PAGINA2, pagina: n });
       const clientes = /* @__PURE__ */ new Map();
       let total = 0;
@@ -20772,7 +20967,7 @@ function registerHigiene(server, hs) {
       resultado.sort((a, b) => Number(a.codigo_cliente) - Number(b.codigo_cliente));
       const completo = clientes.size >= total && !truncado;
       return {
-        criterio: modo,
+        criterio: modo2,
         clientes_na_base: total,
         clientes_lidos: clientes.size,
         clientes_ativos_no_cadastro: ativosCadastro,
@@ -21654,7 +21849,7 @@ function collectTools(hs) {
 }
 
 // src/version.ts
-var VERSION = "0.8.0";
+var VERSION = "0.9.0";
 
 // src/multi.ts
 function diagnosticoVariaveis() {
@@ -21891,6 +22086,7 @@ function collectMultiTools(servers) {
 }
 
 // src/cli.ts
+import { createInterface } from "node:readline";
 var out = (s) => process.stdout.write(s + "\n");
 var err = (s) => process.stderr.write(s + "\n");
 function baseType(s) {
@@ -22006,6 +22202,19 @@ function toolsSemCredenciais() {
 }
 async function main() {
   let argv = process.argv.slice(2);
+  configurarPerguntador(
+    async (i) => {
+      if (!process.stdin.isTTY || !process.stderr.isTTY) return void 0;
+      const rl = createInterface({ input: process.stdin, output: process.stderr });
+      try {
+        if (i.erro) err(i.erro);
+        return await new Promise((res) => rl.question(`C\xF3digo 2FA para ${i.usuario} em ${i.host} (${i.base}): `, res));
+      } finally {
+        rl.close();
+      }
+    },
+    { antesDaJanela: true, nome: "terminal" }
+  );
   const envIdx = argv.indexOf("--env-file");
   if (envIdx >= 0) {
     const file2 = argv[envIdx + 1];

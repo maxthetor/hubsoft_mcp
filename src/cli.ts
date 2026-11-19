@@ -20,6 +20,8 @@ import { collectTools, type ToolDef } from "./registry.js";
 import { collectMultiTools } from "./multi.js";
 import { setExposeSecrets } from "./util.js";
 import { VERSION } from "./version.js";
+import { createInterface } from "node:readline";
+import { configurarPerguntador } from "./dialogo2fa.js";
 
 const out = (s: string) => process.stdout.write(s + "\n");
 const err = (s: string) => process.stderr.write(s + "\n");
@@ -145,6 +147,21 @@ function toolsSemCredenciais(): ToolDef[] {
 
 async function main() {
   let argv = process.argv.slice(2);
+
+  // 2FA na CLI: pergunta no terminal quando há TTY (senão, janela nativa)
+  configurarPerguntador(
+    async (i) => {
+      if (!process.stdin.isTTY || !process.stderr.isTTY) return undefined;
+      const rl = createInterface({ input: process.stdin, output: process.stderr });
+      try {
+        if (i.erro) err(i.erro);
+        return await new Promise<string>((res) => rl.question(`Código 2FA para ${i.usuario} em ${i.host} (${i.base}): `, res));
+      } finally {
+        rl.close();
+      }
+    },
+    { antesDaJanela: true, nome: "terminal" },
+  );
 
   const envIdx = argv.indexOf("--env-file");
   if (envIdx >= 0) {
