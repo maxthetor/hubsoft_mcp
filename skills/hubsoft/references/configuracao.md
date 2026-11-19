@@ -17,7 +17,7 @@ O administrador do provedor cria no Hubsoft:
 | `HUBSOFT_USERNAME` | sim | Usuário de API da pessoa |
 | `HUBSOFT_PASSWORD` | sim | Senha |
 | `HUBSOFT_OTP_SECRET` | não | Semente 2FA (base32 ou otpauth://) para gerar o código sozinho |
-| `HUBSOFT_2FA_DIALOGO` | não | `auto` (padrão), `janela`, `elicitation` ou `off` |
+| `HUBSOFT_2FA_DIALOGO` | não | `auto` (padrão), `navegador`, `janela`, `elicitation` ou `off` |
 | `HUBSOFT_2FA_COMANDO` | não | Comando que imprime o código 2FA (ex.: `op item get "Hubsoft" --otp`) |
 | `HUBSOFT_TOKENS` | não | Arquivo dos tokens salvos (padrão `~/.config/hubsoft/tokens.json`; `off` = só memória) |
 | `HUBSOFT_PERMITIR_ESCRITA` | não | `true` habilita as ferramentas de escrita/CPE (padrão: desligado). Por base: `HUBSOFT_2_PERMITIR_ESCRITA` ou `"permitir_escrita": true` no servidores.json |

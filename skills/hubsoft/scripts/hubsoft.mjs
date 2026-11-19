@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// hubsoft-mcp 0.9.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
+// hubsoft-mcp 0.10.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
 // Arquivo gerado por scripts/bundle.mjs a partir de src/. Não edite.
 import { createRequire as __cr } from "node:module"; const require = __cr(import.meta.url);
 var __defProp = Object.defineProperty;
@@ -2838,21 +2838,21 @@ var asciiTabOrNewline = /[\t\n\r]/g;
 function stripTabAndNewline(value) {
   return value.replace(asciiTabOrNewline, "");
 }
-function urlHostnameOk(url2, hostname3) {
+function urlHostnameOk(url3, hostname3) {
   hostname3.lastIndex = 0;
-  return hostname3.test(url2.hostname);
+  return hostname3.test(url3.hostname);
 }
-function urlProtocolOk(url2, protocol) {
+function urlProtocolOk(url3, protocol) {
   protocol.lastIndex = 0;
-  return protocol.test(url2.protocol.endsWith(":") ? url2.protocol.slice(0, -1) : url2.protocol);
+  return protocol.test(url3.protocol.endsWith(":") ? url3.protocol.slice(0, -1) : url3.protocol);
 }
 var $ZodURL = /* @__PURE__ */ $constructor("$ZodURL", (inst, def) => {
   $ZodStringFormat.init(inst, def);
   inst._zod.check = (payload) => {
     try {
       const trimmed = payload.value.trim();
-      const url2 = validateURL(trimmed, def);
-      if (url2 === URL_BAD_FORMAT) {
+      const url3 = validateURL(trimmed, def);
+      if (url3 === URL_BAD_FORMAT) {
         payload.issues.push({
           code: "invalid_format",
           format: "url",
@@ -2863,7 +2863,7 @@ var $ZodURL = /* @__PURE__ */ $constructor("$ZodURL", (inst, def) => {
         });
         return;
       }
-      if (url2 === URL_UNPARSEABLE) {
+      if (url3 === URL_UNPARSEABLE) {
         payload.issues.push({
           code: "invalid_format",
           format: "url",
@@ -2873,11 +2873,11 @@ var $ZodURL = /* @__PURE__ */ $constructor("$ZodURL", (inst, def) => {
         });
         return;
       }
-      if (url2 === true) {
+      if (url3 === true) {
         payload.value = stripTabAndNewline(trimmed);
         return;
       }
-      if (def.hostname && !urlHostnameOk(url2, def.hostname)) {
+      if (def.hostname && !urlHostnameOk(url3, def.hostname)) {
         payload.issues.push({
           code: "invalid_format",
           format: "url",
@@ -2888,7 +2888,7 @@ var $ZodURL = /* @__PURE__ */ $constructor("$ZodURL", (inst, def) => {
           continue: !def.abort
         });
       }
-      if (def.protocol && !urlProtocolOk(url2, def.protocol)) {
+      if (def.protocol && !urlProtocolOk(url3, def.protocol)) {
         payload.issues.push({
           code: "invalid_format",
           format: "url",
@@ -2899,7 +2899,7 @@ var $ZodURL = /* @__PURE__ */ $constructor("$ZodURL", (inst, def) => {
           continue: !def.abort
         });
       }
-      payload.value = def.normalize ? url2.href : stripTabAndNewline(trimmed);
+      payload.value = def.normalize ? url3.href : stripTabAndNewline(trimmed);
       return;
     } catch (_) {
       payload.issues.push({
@@ -19889,13 +19889,13 @@ function lerArquivo(caminho) {
   }));
 }
 function lerSlot(prefixo, origem) {
-  const url2 = env(`${prefixo}URL`);
-  if (!url2) return void 0;
+  const url3 = env(`${prefixo}URL`);
+  if (!url3) return void 0;
   return {
     origem,
     nome: env(`${prefixo}NOME`),
     descricao: env(`${prefixo}DESCRICAO`),
-    url: url2,
+    url: url3,
     client_id: env(`${prefixo}CLIENT_ID`),
     client_secret: env(`${prefixo}CLIENT_SECRET`),
     usuario: env(`${prefixo}USERNAME`),
@@ -19979,6 +19979,7 @@ function loadEnvFiles(files) {
 
 // src/dialogo2fa.ts
 import { spawn, spawnSync } from "node:child_process";
+var CANCELAR = "\0cancelou";
 var TEMPO_LIMITE_MS = 12e4;
 var ESPERA_CANCELADO_MS = 10 * 6e4;
 var interativo;
@@ -19987,7 +19988,7 @@ function configurarPerguntador(fn, opts) {
 }
 function modo() {
   const v = (process.env.HUBSOFT_2FA_DIALOGO ?? "").trim().toLowerCase();
-  return ["auto", "janela", "elicitation", "off"].includes(v) ? v : "auto";
+  return ["auto", "navegador", "janela", "elicitation", "off"].includes(v) ? v : "auto";
 }
 function extrairCodigo(s) {
   return s?.match(/\b\d{6,8}\b/)?.[0];
@@ -20000,12 +20001,12 @@ function textos(i) {
 O token fica salvo; este c\xF3digo n\xE3o ser\xE1 pedido de novo.`;
   return { titulo, msg };
 }
-function executar(cmd, args, env2, shell = false) {
+function executar(cmd, args, env2, shell = false, ocultar = true) {
   return new Promise((resolve) => {
     let out2 = "";
     let p;
     try {
-      p = spawn(cmd, args, { env: { ...process.env, ...env2 }, windowsHide: true, shell, stdio: ["ignore", "pipe", "ignore"] });
+      p = spawn(cmd, args, { env: { ...process.env, ...env2 }, windowsHide: ocultar, shell, stdio: ["ignore", "pipe", "ignore"] });
     } catch {
       return resolve({ code: -1, out: "" });
     }
@@ -20063,7 +20064,7 @@ async function janela(i) {
   let r;
   if (tipo === "windows") {
     const enc = Buffer.from(PS, "utf16le").toString("base64");
-    r = await executar("powershell.exe", ["-NoProfile", "-NonInteractive", "-STA", "-ExecutionPolicy", "Bypass", "-EncodedCommand", enc], env2);
+    r = await executar("powershell.exe", ["-NoProfile", "-NonInteractive", "-STA", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-EncodedCommand", enc], env2, false, false);
   } else if (tipo === "macos") {
     r = await executar("osascript", OSA.flatMap((l) => ["-e", l]), env2);
   } else if (tipo === "zenity") {
@@ -20071,7 +20072,7 @@ async function janela(i) {
   } else if (tipo === "kdialog") {
     r = await executar("kdialog", ["--title", titulo, "--inputbox", msg], env2);
   } else return void 0;
-  return r.code === 0 ? extrairCodigo(r.out) : void 0;
+  return r.code === 0 ? extrairCodigo(r.out) ?? CANCELAR : CANCELAR;
 }
 async function comandoExterno(i) {
   const cmd = process.env.HUBSOFT_2FA_COMANDO?.trim();
@@ -20079,39 +20080,30 @@ async function comandoExterno(i) {
   const r = await executar(cmd, [], { HUBSOFT_2FA_BASE: i.base, HUBSOFT_2FA_HOST: i.host, HUBSOFT_2FA_USUARIO: i.usuario }, true);
   return r.code === 0 ? extrairCodigo(r.out) : void 0;
 }
-function meiosDisponiveis() {
-  const m = modo();
-  if (m === "off") return [];
-  const lista = [];
+function temDesktop() {
+  if (process.platform === "win32" || process.platform === "darwin") return true;
+  return !!(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
+}
+function comandoDefinido() {
   const cmd = process.env.HUBSOFT_2FA_COMANDO?.trim();
-  if (m === "auto" && cmd && !/^\$\{[^}]+\}$/.test(cmd)) lista.push("comando");
-  if (interativo?.antesDaJanela && m === "auto") lista.push(interativo.nome);
-  if ((m === "auto" || m === "janela") && janelaDisponivel()) lista.push(`janela (${janelaDisponivel()})`);
-  if (interativo && !interativo.antesDaJanela && (m === "auto" || m === "elicitation")) lista.push(interativo.nome);
+  return !!cmd && !/^\$\{[^}]+\}$/.test(cmd);
+}
+function meios() {
+  const m = modo();
+  const lista = [];
+  if (m === "off") return lista;
+  if (m === "auto" && comandoDefinido()) lista.push({ nome: "comando", perguntar: comandoExterno });
+  if (m === "auto" && interativo?.antesDaJanela) lista.push({ nome: interativo.nome, perguntar: interativo.fn });
+  if (m === "janela" && janelaDisponivel()) lista.push({ nome: `janela (${janelaDisponivel()})`, perguntar: janela });
+  if (m === "auto" && temDesktop() || m === "navegador") lista.push({ nome: "navegador", pagina: true });
+  if (interativo && !interativo.antesDaJanela && (m === "auto" || m === "elicitation")) {
+    lista.push({ nome: interativo.nome, perguntar: interativo.fn });
+  }
   return lista;
 }
-async function pedirCodigo(i) {
-  const m = modo();
-  if (m === "off") return void 0;
-  const tentativas = [];
-  if (m === "auto") tentativas.push(() => comandoExterno(i));
-  if (interativo?.antesDaJanela && m === "auto") tentativas.push(() => interativo.fn(i));
-  if ((m === "auto" || m === "janela") && janelaDisponivel()) {
-    tentativas.push(async () => await janela(i) ?? CANCELOU);
-  }
-  if (interativo && !interativo.antesDaJanela && (m === "auto" || m === "elicitation")) tentativas.push(() => interativo.fn(i));
-  for (const t of tentativas) {
-    try {
-      const c = await t();
-      if (c === CANCELOU) return void 0;
-      const cod = extrairCodigo(c);
-      if (cod) return cod;
-    } catch {
-    }
-  }
-  return void 0;
+function meiosDisponiveis() {
+  return meios().map((x) => x.nome);
 }
-var CANCELOU = "\0cancelou";
 var fila = Promise.resolve();
 var canceladoAte = /* @__PURE__ */ new Map();
 function comTrava(fn) {
@@ -20130,6 +20122,206 @@ function limparCancelado(chave2) {
   canceladoAte.delete(chave2);
 }
 
+// src/pagina2fa.ts
+import http from "node:http";
+import { randomBytes } from "node:crypto";
+import { spawn as spawn2 } from "node:child_process";
+var TOKEN = randomBytes(16).toString("hex");
+var pendentes = /* @__PURE__ */ new Map();
+var servidor;
+var porta = 0;
+var abertoEm = 0;
+function url2() {
+  return `http://127.0.0.1:${porta}/2fa/${TOKEN}`;
+}
+function urlPagina() {
+  return servidor && [...pendentes.values()].some((e) => e.estado === "pendente") ? url2() : void 0;
+}
+function abrirNavegador(u) {
+  const v = (process.env.HUBSOFT_2FA_ABRIR ?? "").trim().toLowerCase();
+  if (["off", "false", "nao", "n\xE3o", "0"].includes(v)) return;
+  if (Date.now() - abertoEm < 6e4) return;
+  abertoEm = Date.now();
+  const [cmd, args] = process.platform === "win32" ? ["rundll32", ["url.dll,FileProtocolHandler", u]] : process.platform === "darwin" ? ["open", [u]] : ["xdg-open", [u]];
+  try {
+    const p = spawn2(cmd, args, { stdio: "ignore", detached: true });
+    p.on("error", () => void 0);
+    p.unref();
+  } catch {
+  }
+}
+function estado() {
+  return [...pendentes.values()].map((e) => ({
+    chave: e.chave,
+    base: e.base,
+    host: e.host,
+    usuario: e.usuario,
+    estado: e.estado,
+    erro: e.erro
+  }));
+}
+function ler(req) {
+  return new Promise((res) => {
+    let b = "";
+    req.on("data", (d) => {
+      b += d;
+      if (b.length > 1e4) req.destroy();
+    });
+    req.on("end", () => {
+      try {
+        res(JSON.parse(b));
+      } catch {
+        res({});
+      }
+    });
+  });
+}
+async function tratar(req, res) {
+  const json2 = (o, s = 200) => {
+    res.writeHead(s, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+    res.end(JSON.stringify(o));
+  };
+  if (req.headers.host !== `127.0.0.1:${porta}` && req.headers.host !== `localhost:${porta}`) return json2({ erro: "host" }, 403);
+  const caminho = (req.url ?? "").split("?")[0];
+  const base = `/2fa/${TOKEN}`;
+  if (caminho === base && req.method === "GET") {
+    res.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'",
+      "Referrer-Policy": "no-referrer"
+    });
+    return res.end(HTML);
+  }
+  if (caminho === `${base}/estado` && req.method === "GET") return json2(estado());
+  if (caminho === `${base}/enviar` && req.method === "POST") {
+    if (!String(req.headers["content-type"] ?? "").includes("application/json")) return json2({ erro: "tipo" }, 415);
+    const { chave: chave2, codigo, cancelar } = await ler(req);
+    const e = pendentes.get(String(chave2));
+    if (!e) return json2({ erro: "Pedido n\xE3o encontrado (j\xE1 conclu\xEDdo?)" }, 404);
+    if (e.estado !== "pendente") return json2({ estado: e.estado });
+    if (cancelar) {
+      e.estado = "cancelado";
+      e.cancelar();
+      e.resolver(false);
+      return json2({ estado: e.estado });
+    }
+    const cod = String(codigo ?? "").replace(/\D/g, "");
+    if (!/^\d{6,8}$/.test(cod)) return json2({ estado: e.estado, erro: "Digite os 6 d\xEDgitos do app autenticador." });
+    const erro = await e.tentar(cod);
+    if (erro) {
+      e.erro = erro;
+      return json2({ estado: e.estado, erro });
+    }
+    e.estado = "conectado";
+    e.erro = void 0;
+    e.resolver(true);
+    limparDepois();
+    return json2({ estado: e.estado });
+  }
+  json2({ erro: "n\xE3o encontrado" }, 404);
+}
+var timerLimpeza;
+function limparDepois() {
+  clearTimeout(timerLimpeza);
+  timerLimpeza = setTimeout(() => {
+    for (const [k, e] of pendentes) if (e.estado !== "pendente") pendentes.delete(k);
+    if (!pendentes.size && servidor) {
+      servidor.close();
+      servidor = void 0;
+    }
+  }, 10 * 6e4);
+  timerLimpeza.unref();
+}
+async function garantirServidor() {
+  if (servidor) return;
+  const s = http.createServer((req, res) => {
+    tratar(req, res).catch(() => {
+      res.writeHead(500);
+      res.end();
+    });
+  });
+  await new Promise((ok2, erro) => {
+    s.once("error", erro);
+    s.listen(0, "127.0.0.1", () => ok2());
+  });
+  s.unref();
+  porta = s.address().port;
+  servidor = s;
+}
+async function solicitarNaPagina(p) {
+  await garantirServidor();
+  let e = pendentes.get(p.chave);
+  if (!e || e.estado !== "pendente") {
+    let resolver;
+    const concluido = new Promise((r) => resolver = r);
+    e = { ...p, estado: "pendente", concluido, resolver };
+    pendentes.set(p.chave, e);
+  }
+  limparDepois();
+  abrirNavegador(url2());
+  return { url: url2(), concluido: e.concluido };
+}
+var HTML = `<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hubsoft \u2013 c\xF3digo 2FA</title>
+<style>
+:root{color-scheme:light dark;--fg:#1f2328;--mut:#656d76;--bd:#d0d7de;--bg:#fff;--card:#f6f8fa;--ok:#1a7f37;--err:#cf222e;--pri:#0969da}
+@media(prefers-color-scheme:dark){:root{--fg:#e6edf3;--mut:#8d96a0;--bd:#30363d;--bg:#0d1117;--card:#161b22;--ok:#3fb950;--err:#f85149;--pri:#4493f8}}
+*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--fg);display:flex;justify-content:center;padding:48px 16px}
+main{width:100%;max-width:440px}h1{font-size:20px;margin:0 0 4px}p.sub{color:var(--mut);margin:0 0 24px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:16px;margin-bottom:12px}
+.base{font-weight:600}.det{color:var(--mut);font-size:13px;margin-bottom:12px;word-break:break-all}
+form{display:flex;gap:8px}input{flex:1;font:600 22px ui-monospace,Consolas,monospace;letter-spacing:6px;text-align:center;padding:8px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--fg);min-width:0}
+button{font:inherit;padding:8px 14px;border-radius:8px;border:1px solid var(--bd);background:var(--bg);color:var(--fg);cursor:pointer}
+button.pri{background:var(--pri);border-color:var(--pri);color:#fff}button:disabled{opacity:.6;cursor:default}
+.msg{font-size:13px;margin-top:8px}.err{color:var(--err)}.ok{color:var(--ok);font-weight:600}.mut{color:var(--mut)}
+</style></head><body><main>
+<h1>Hubsoft (n\xE3o oficial) \u2013 c\xF3digo 2FA</h1>
+<p class="sub">Digite o c\xF3digo de 6 d\xEDgitos do seu app autenticador. O acesso fica salvo; o c\xF3digo n\xE3o ser\xE1 pedido de novo.</p>
+<div id="lista"><p class="mut">Carregando\u2026</p></div>
+<p id="fim" class="ok" hidden>Pronto! Pode fechar esta aba e voltar ao Claude.</p>
+</main><script>
+const base = location.pathname;
+const cards = new Map();
+function el(t, c, txt){const e=document.createElement(t);if(c)e.className=c;if(txt!==undefined)e.textContent=txt;return e;}
+async function enviar(chave, corpo){
+  const r = await fetch(base + "/enviar", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({chave, ...corpo})});
+  return r.json();
+}
+function render(lista){
+  const box = document.getElementById("lista");
+  if (!lista.length) { box.innerHTML = '<p class="mut">Nenhum pedido pendente.</p>'; return; }
+  if (box.querySelector("p.mut")) box.textContent = "";
+  for (const p of lista) {
+    let c = cards.get(p.chave);
+    if (!c) {
+      c = {root: el("div","card")};
+      c.root.append(el("div","base",p.base), el("div","det",p.usuario + " \xB7 " + p.host));
+      c.form = el("form"); c.inp = el("input"); c.inp.inputMode="numeric"; c.inp.autocomplete="one-time-code"; c.inp.maxLength=8; c.inp.placeholder="000000";
+      c.btn = el("button","pri","Conectar"); c.btn.type="submit";
+      c.cancel = el("button","","Cancelar"); c.cancel.type="button";
+      c.form.append(c.inp, c.btn, c.cancel); c.msg = el("div","msg");
+      c.root.append(c.form, c.msg); box.append(c.root); cards.set(p.chave, c);
+      c.form.onsubmit = async (ev) => { ev.preventDefault(); c.btn.disabled = true; c.msg.className="msg mut"; c.msg.textContent="Conectando\u2026";
+        const r = await enviar(p.chave, {codigo: c.inp.value}).catch(()=>({erro:"Sem resposta do MCP."})); c.btn.disabled=false; aplicar(c, r.estado || "pendente", r.erro); };
+      c.cancel.onclick = async () => { const r = await enviar(p.chave, {cancelar:true}).catch(()=>({})); aplicar(c, r.estado || "cancelado"); };
+      if (cards.size === 1) c.inp.focus();
+    }
+    if (p.estado !== "pendente") aplicar(c, p.estado, p.erro);
+  }
+  document.getElementById("fim").hidden = !lista.length || lista.some(p => p.estado === "pendente");
+}
+function aplicar(c, estado, erro){
+  if (estado === "conectado") { c.form.remove(); c.msg.className="msg ok"; c.msg.textContent="\u2713 Conectado"; }
+  else if (estado === "cancelado") { c.form.remove(); c.msg.className="msg mut"; c.msg.textContent="Cancelado"; }
+  else if (erro) { c.msg.className="msg err"; c.msg.textContent=erro; c.inp.select(); }
+  const todos=[...cards.values()]; document.getElementById("fim").hidden = todos.some(x => x.form.isConnected);
+}
+async function atualizar(){ try { render(await (await fetch(base + "/estado")).json()); } catch {} }
+atualizar(); setInterval(atualizar, 2000);
+</script></body></html>`;
+
 // src/client.ts
 var HubsoftError = class extends Error {
   constructor(message, status, body) {
@@ -20142,7 +20334,7 @@ var HubsoftError = class extends Error {
   body;
 };
 var MARGEM_MS = 5 * 6e4;
-var DICA_2FA = "Se este usu\xE1rio usa 2FA e nenhuma janela pedindo o c\xF3digo apareceu (ou foi cancelada), fa\xE7a o primeiro login com a ferramenta hubsoft_conectar (servidor + codigo_2fa do app autenticador) ou configure a semente em HUBSOFT_OTP_SECRET. Depois disso o token fica salvo e \xE9 renovado sozinho.";
+var DICA_2FA = "Se este usu\xE1rio usa 2FA e o pedido do c\xF3digo foi cancelado ou n\xE3o apareceu, fa\xE7a o primeiro login com a ferramenta hubsoft_conectar (servidor + codigo_2fa do app autenticador) ou configure a semente em HUBSOFT_OTP_SECRET. Depois disso o token fica salvo e \xE9 renovado sozinho.";
 var HubsoftClient = class {
   constructor(cfg) {
     this.cfg = cfg;
@@ -20244,42 +20436,94 @@ var HubsoftClient = class {
     }
     throw this.falha(r.res, r.body, !!this.cfg.otpSecret);
   }
-  /** Pede o código 2FA (até 3 tentativas). undefined = cancelado ou sem meio interativo. */
-  loginInterativo() {
-    if (emEspera(this.chave)) return Promise.resolve(void 0);
-    return comTrava(async () => {
-      const salvo = this.store.get(this.chave);
-      if (salvo?.access_token && Date.now() < salvo.expires_at - MARGEM_MS) return this.estado(salvo);
-      if (emEspera(this.chave)) return void 0;
-      let erro;
-      for (let tentativa = 1; tentativa <= 3; tentativa++) {
-        const codigo = await pedirCodigo({
-          base: this.cfg.nome,
-          host: new URL(this.cfg.baseUrl).host,
-          usuario: this.cfg.username,
-          tentativa,
-          erro
-        });
-        if (!codigo) {
-          if (tentativa > 1 || this.ultimoPedidoTeveMeio()) marcarCancelado(this.chave);
-          return void 0;
-        }
-        const r = await this.pedirToken({ one_time_password: codigo });
-        if (r.body?.access_token) {
-          limparCancelado(this.chave);
-          return this.guardar(r.body);
-        }
-        if (r.res.status === 429) throw this.falha(r.res, r.body, false);
-        erro = `C\xF3digo recusado pelo Hubsoft (HTTP ${r.res.status}). Use o c\xF3digo atual do app` + (tentativa === 2 ? ". Se continuar recusando, o problema pode ser a senha ou o client_id." : ".");
-      }
-      throw new HubsoftError(
-        "Login recusado mesmo com o c\xF3digo 2FA (3 tentativas). Confira a senha, o client_id/client_secret e se o client est\xE1 liberado para este usu\xE1rio no Hubsoft.",
-        401
-      );
-    });
+  /** Token salvo ainda válido (outro cliente do processo ou outra janela pode ter conectado). */
+  salvoValido() {
+    const salvo = this.store.get(this.chave);
+    return salvo?.access_token && Date.now() < salvo.expires_at - MARGEM_MS ? this.estado(salvo) : void 0;
   }
-  ultimoPedidoTeveMeio() {
-    return meiosDisponiveis().length > 0;
+  info(tentativa, erro) {
+    return { base: this.cfg.nome, host: new URL(this.cfg.baseUrl).host, usuario: this.cfg.username, tentativa, erro };
+  }
+  /** Login com o código; devolve o token ou a mensagem de erro. */
+  async tentarCodigo(codigo) {
+    const r = await this.pedirToken({ one_time_password: codigo });
+    if (r.body?.access_token) {
+      limparCancelado(this.chave);
+      this.token = this.guardar(r.body);
+      return this.token;
+    }
+    if (r.res.status === 429) return "Limite de autentica\xE7\xE3o do Hubsoft atingido (30/min). Aguarde um minuto e tente de novo.";
+    const msg = r.body?.msg || r.body?.message || r.body?.error || "";
+    return `C\xF3digo recusado pelo Hubsoft (HTTP ${r.res.status}${msg ? `: ${msg}` : ""}). Use o c\xF3digo atual do app; se continuar, confira a senha e o client.`;
+  }
+  /**
+   * Pede o código 2FA ao usuário pelos meios disponíveis (comando, terminal, navegador,
+   * elicitation). undefined = cancelado ou sem meio interativo.
+   */
+  async loginInterativo() {
+    if (emEspera(this.chave)) return void 0;
+    for (const m of meios()) {
+      if (m.pagina) return this.loginNavegador();
+      const r = await comTrava(() => this.loginComPerguntador(m.perguntar));
+      if (r === "sem") continue;
+      if (r === "cancelou") {
+        marcarCancelado(this.chave);
+        return void 0;
+      }
+      return r;
+    }
+    return void 0;
+  }
+  /** Até 3 tentativas com um perguntador; "sem" = este meio não conseguiu perguntar. */
+  async loginComPerguntador(perguntar) {
+    const ja = this.salvoValido();
+    if (ja) return ja;
+    let erro;
+    for (let tentativa = 1; tentativa <= 3; tentativa++) {
+      const resp = await perguntar(this.info(tentativa, erro)).catch(() => void 0);
+      if (resp === void 0) return tentativa === 1 ? "sem" : "cancelou";
+      const codigo = resp === CANCELAR ? void 0 : extrairCodigo(resp);
+      if (!codigo) return "cancelou";
+      const r = await this.tentarCodigo(codigo);
+      if (typeof r !== "string") return r;
+      erro = r;
+    }
+    throw new HubsoftError(
+      "Login recusado mesmo com o c\xF3digo 2FA (3 tentativas). Confira a senha, o client_id/client_secret e se o client est\xE1 liberado para este usu\xE1rio no Hubsoft.",
+      401
+    );
+  }
+  /**
+   * Página no navegador: espera um pouco pelo código (a consulta segue sozinha se ele chegar);
+   * senão responde com o link e o login termina quando o usuário enviar o código.
+   */
+  async loginNavegador() {
+    const ja = this.salvoValido();
+    if (ja) return ja;
+    const { url: url3, concluido } = await solicitarNaPagina({
+      chave: this.chave,
+      base: this.cfg.nome,
+      host: new URL(this.cfg.baseUrl).host,
+      usuario: this.cfg.username,
+      tentar: async (codigo) => {
+        const r = await this.tentarCodigo(codigo);
+        return typeof r === "string" ? r : void 0;
+      },
+      cancelar: () => marcarCancelado(this.chave)
+    });
+    const espera = Math.max(0, Number(process.env.HUBSOFT_2FA_ESPERA_S ?? 45)) * 1e3;
+    let timer;
+    const ok2 = await Promise.race([
+      concluido,
+      new Promise((r) => timer = setTimeout(() => r(void 0), espera))
+    ]);
+    clearTimeout(timer);
+    if (ok2 === true) return this.salvoValido() ?? this.token;
+    if (ok2 === false) return void 0;
+    throw new HubsoftError(
+      `Login 2FA pendente na base ${this.cfg.nome}: abri uma p\xE1gina no navegador para o usu\xE1rio digitar o c\xF3digo do app autenticador. Se ela n\xE3o abriu, o link \xE9 ${url3} . Mostre o link ao usu\xE1rio; depois que ele conectar, repita a consulta (o acesso fica salvo e o c\xF3digo n\xE3o \xE9 pedido de novo).`,
+      401
+    );
   }
   async getToken(force = false) {
     if (!force && this.token && Date.now() < this.token.expiresAt) {
@@ -20327,6 +20571,7 @@ var HubsoftClient = class {
       refresh_emitido_em: t?.refresh_emitido_em ?? null,
       codigo_2fa_automatico: !!this.cfg.otpSecret,
       pedido_2fa: this.cfg.otpSecret ? "semente" : meiosDisponiveis().join(" \u2192 ") || "nenhum (use hubsoft_conectar)",
+      ...urlPagina() ? { pagina_2fa: urlPagina() } : {},
       arquivo_tokens: this.cfg.tokens || "desativado (s\xF3 mem\xF3ria)"
     };
   }
@@ -20336,11 +20581,11 @@ var HubsoftClient = class {
     return this.situacaoToken();
   }
   async request(method, path, opts = {}) {
-    const url2 = new URL(this.cfg.baseUrl + (path.startsWith("/") ? path : `/${path}`));
+    const url3 = new URL(this.cfg.baseUrl + (path.startsWith("/") ? path : `/${path}`));
     for (const [k, v] of Object.entries(opts.query ?? {})) {
-      if (v !== void 0 && v !== null && v !== "") url2.searchParams.set(k, String(v));
+      if (v !== void 0 && v !== null && v !== "") url3.searchParams.set(k, String(v));
     }
-    const doFetch = async (force) => fetch(url2, {
+    const doFetch = async (force) => fetch(url3, {
       method,
       headers: {
         Accept: "application/json",
@@ -20366,11 +20611,11 @@ var HubsoftClient = class {
    * - demais códigos: sem nova tentativa.
    */
   async raw(method, path, opts = {}) {
-    const url2 = new URL(this.cfg.baseUrl + (path.startsWith("/") ? path : `/${path}`));
+    const url3 = new URL(this.cfg.baseUrl + (path.startsWith("/") ? path : `/${path}`));
     for (const [k, v] of Object.entries(opts.query ?? {})) {
-      if (v !== void 0 && v !== null && v !== "") url2.searchParams.set(k, String(v));
+      if (v !== void 0 && v !== null && v !== "") url3.searchParams.set(k, String(v));
     }
-    const enviar = async (force) => fetch(url2, {
+    const enviar = async (force) => fetch(url3, {
       method,
       headers: {
         Accept: "application/json",
@@ -20391,7 +20636,7 @@ var HubsoftClient = class {
       const h = Number(res.headers.get("retry-after"));
       retryAfter = Number(body?.retry_after ?? (Number.isFinite(h) ? h : void 0)) || void 0;
     }
-    return { status: res.status, ok: res.ok, url: url2.toString(), body, retryAfter, ...tokenRenovado ? { tokenRenovado } : {} };
+    return { status: res.status, ok: res.ok, url: url3.toString(), body, retryAfter, ...tokenRenovado ? { tokenRenovado } : {} };
   }
   get(path, query) {
     return this.request("GET", path, { query });
@@ -21107,10 +21352,10 @@ function responder(hs, data, erro = false) {
   return erro ? { ...r, isError: true } : r;
 }
 async function lerEstado(hs, alvo) {
-  const estado = {};
-  if (alvo.servico) estado.servico = await lerServico(hs, alvo.servico);
-  if (alvo.phy) estado.cpe = await lerCpe(hs, alvo.phy);
-  return estado;
+  const estado2 = {};
+  if (alvo.servico) estado2.servico = await lerServico(hs, alvo.servico);
+  if (alvo.phy) estado2.cpe = await lerCpe(hs, alvo.phy);
+  return estado2;
 }
 async function escrever(hs, p) {
   const antes = p.estadoAntes ?? await lerEstado(hs, p.alvo);
@@ -21849,7 +22094,7 @@ function collectTools(hs) {
 }
 
 // src/version.ts
-var VERSION = "0.9.0";
+var VERSION = "0.10.0";
 
 // src/multi.ts
 function diagnosticoVariaveis() {
@@ -21997,8 +22242,8 @@ function collectMultiTools(servers) {
           },
           cb: async (args) => {
             try {
-              const { servidor, ...resto } = args ?? {};
-              resolverUmaBase(servers, servidor);
+              const { servidor: servidor2, ...resto } = args ?? {};
+              resolverUmaBase(servers, servidor2);
               return comServidor(unico.nome, await t.cb(resto), max);
             } catch (e) {
               return fail(e);
@@ -22030,9 +22275,9 @@ function collectMultiTools(servers) {
       },
       cb: async (args) => {
         try {
-          const { servidor, ...resto } = args ?? {};
+          const { servidor: servidor2, ...resto } = args ?? {};
           if (umSo) {
-            const alvo = resolverUmaBase(servers, servidor);
+            const alvo = resolverUmaBase(servers, servidor2);
             const def = porServidor.get(alvo.nome).find((d) => d.name === name);
             if (!def) {
               throw new Error(
@@ -22041,7 +22286,7 @@ function collectMultiTools(servers) {
             }
             return comServidor(alvo.nome, await def.cb(resto), max);
           }
-          const alvos = resolverServidores(servers, servidor);
+          const alvos = resolverServidores(servers, servidor2);
           const resultados = await Promise.all(
             alvos.map(async (s) => {
               const def = porServidor.get(s.nome).find((d) => d.name === name);
@@ -22208,7 +22453,8 @@ async function main() {
       const rl = createInterface({ input: process.stdin, output: process.stderr });
       try {
         if (i.erro) err(i.erro);
-        return await new Promise((res) => rl.question(`C\xF3digo 2FA para ${i.usuario} em ${i.host} (${i.base}): `, res));
+        const r3 = await new Promise((res) => rl.question(`C\xF3digo 2FA para ${i.usuario} em ${i.host} (${i.base}, Enter cancela): `, res));
+        return r3.trim() ? r3 : CANCELAR;
       } finally {
         rl.close();
       }

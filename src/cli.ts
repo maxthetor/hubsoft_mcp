@@ -21,7 +21,7 @@ import { collectMultiTools } from "./multi.js";
 import { setExposeSecrets } from "./util.js";
 import { VERSION } from "./version.js";
 import { createInterface } from "node:readline";
-import { configurarPerguntador } from "./dialogo2fa.js";
+import { CANCELAR, configurarPerguntador } from "./dialogo2fa.js";
 
 const out = (s: string) => process.stdout.write(s + "\n");
 const err = (s: string) => process.stderr.write(s + "\n");
@@ -155,7 +155,8 @@ async function main() {
       const rl = createInterface({ input: process.stdin, output: process.stderr });
       try {
         if (i.erro) err(i.erro);
-        return await new Promise<string>((res) => rl.question(`Código 2FA para ${i.usuario} em ${i.host} (${i.base}): `, res));
+        const r = await new Promise<string>((res) => rl.question(`Código 2FA para ${i.usuario} em ${i.host} (${i.base}, Enter cancela): `, res));
+        return r.trim() ? r : CANCELAR;
       } finally {
         rl.close();
       }

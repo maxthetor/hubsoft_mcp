@@ -4,7 +4,7 @@ import { loadServers } from "./config.js";
 import { collectMultiTools, diagnosticoVariaveis, instrucoesServidores } from "./multi.js";
 import { setExposeSecrets } from "./util.js";
 import { VERSION } from "./version.js";
-import { configurarPerguntador } from "./dialogo2fa.js";
+import { CANCELAR, configurarPerguntador } from "./dialogo2fa.js";
 
 export const INSTRUCTIONS =
   "Ferramentas para o ERP Hubsoft (provedores de internet). As chamadas usam o login " +
@@ -22,9 +22,9 @@ export const INSTRUCTIONS =
   "Faturas com status 'aguardando' e vencimento futuro (ex.: parcelas de carnê) não estão vencidas. " +
   "Senhas (ex.: PPPoE) são mascaradas por padrão. " +
   "Dados de clientes são pessoais (LGPD): mostre apenas o necessário. " +
-  "Quando o login exige 2FA, o próprio MCP abre uma janela pedindo o código ao usuário. Se mesmo assim " +
-  "falhar (janela cancelada ou indisponível), peça o código de 6 dígitos do app autenticador e chame " +
-  "hubsoft_conectar (servidor + codigo_2fa); nunca invente um código. " +
+  "Quando o login exige 2FA, o próprio MCP abre uma página no navegador para o usuário digitar o código. " +
+  "Se a resposta disser 'Login 2FA pendente', mostre o link ao usuário e repita a consulta depois que ele " +
+  "conectar. Só se isso não for possível, peça o código e chame hubsoft_conectar; nunca invente um código. " +
   "O token fica salvo, então isso só é preciso no primeiro acesso. " +
   "Antes de qualquer ação que altere dados, confirme cliente e serviço com o usuário. " +
   "Ferramentas de escrita/controle de CPE (configurar_autenticacao, vincular/desvincular_cpe, " +
@@ -66,7 +66,7 @@ async function main() {
         } as any,
         { timeout: 120_000 },
       );
-      return r.action === "accept" ? String((r.content as any)?.codigo ?? "") : undefined;
+      return r.action === "accept" ? String((r.content as any)?.codigo ?? "") : CANCELAR;
     },
     { antesDaJanela: false, nome: "elicitation" },
   );

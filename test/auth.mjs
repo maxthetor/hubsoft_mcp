@@ -205,5 +205,61 @@ r = await consulta(c);
 assert.equal(r.err, true); assert.equal(pedidos.length, 0);
 await c.close();
 
+// 15) Página no navegador (padrão no desktop): não bloqueia; o login termina quando o código chega
+const req = (u, { method = "GET", body, headers = {} } = {}) => new Promise((ok) => {
+  const x = http.request(u, { method, headers: { ...(body ? { "Content-Type": "application/json" } : {}), ...headers } }, (res) => { let b = ""; res.on("data", d => b += d); res.on("end", () => { let j = null; try { j = JSON.parse(b); } catch {} ok({ status: res.statusCode, text: b, json: j }); }); });
+  if (body) x.write(typeof body === "string" ? body : JSON.stringify(body)); x.end();
+});
+const pag = { HUBSOFT_TOKENS: "off", HUBSOFT_2FA_DIALOGO: "navegador", HUBSOFT_2FA_ABRIR: "off", HUBSOFT_2FA_ESPERA_S: "1" };
+c = await conectar(pag);
+r = await consulta(c);
+assert.equal(r.err, true); assert.match(r.text, /Login 2FA pendente na base base_pf/);
+const link = r.text.match(/http:\/\/127\.0\.0\.1:\d+\/2fa\/[0-9a-f]{32}/)[0];
+const host = new URL(link).host;
+assert.equal((await req(link, { headers: { Host: "evil.example:80" } })).status, 403, "DNS rebinding bloqueado");
+assert.equal((await req(link.replace(/[0-9a-f]{32}$/, "0".repeat(32)))).status, 404, "token errado");
+let h = await req(link); assert.equal(h.status, 200); assert.match(h.text, /código 2FA/);
+let est = (await req(link + "/estado")).json;
+assert.equal(est.length, 1); assert.equal(est[0].base, "base_pf"); assert.equal(est[0].estado, "pendente");
+assert.ok(!JSON.stringify(est).includes("tentar"));
+r = await call(c, "hubsoft_servidores", {});
+assert.equal(r.json[0].autenticacao.pagina_2fa, link); assert.match(r.json[0].autenticacao.pedido_2fa, /navegador/);
+assert.equal((await req(link + "/enviar", { method: "POST", body: "x", headers: { "Content-Type": "text/plain" } })).status, 415);
+h = await req(link + "/enviar", { method: "POST", body: { chave: est[0].chave, codigo: "000000" } });
+assert.equal(h.json.estado, "pendente"); assert.match(h.json.erro, /recusado/);
+h = await req(link + "/enviar", { method: "POST", body: { chave: est[0].chave, codigo: totp(SEMENTE) } });
+assert.equal(h.json.estado, "conectado");
+antes = grants.length;
+r = await consulta(c);
+assert.equal(r.err, false, r.text); assert.equal(grants.length, antes, "usa o token obtido pela página");
+await c.close();
+
+// 16) Se o código chega durante a espera, a própria consulta continua e dá certo
+c = await conectar({ ...pag, HUBSOFT_2FA_ESPERA_S: "30" });
+const emCurso = consulta(c);
+let url2;
+for (let i = 0; i < 50 && !url2; i++) { await new Promise(r => setTimeout(r, 100)); url2 = (await call(c, "hubsoft_servidores", {})).json[0].autenticacao.pagina_2fa; }
+assert.ok(url2, "página criada durante a espera");
+est = (await req(url2 + "/estado")).json;
+h = await req(url2 + "/enviar", { method: "POST", body: { chave: est[0].chave, codigo: totp(SEMENTE) } });
+assert.equal(h.json.estado, "conectado");
+r = await emCurso;
+assert.equal(r.err, false, r.text);
+await c.close();
+
+// 17) Cancelar na página: a consulta falha com a dica e não pergunta de novo por um tempo
+c = await conectar({ ...pag, HUBSOFT_2FA_ESPERA_S: "30" });
+const emCurso2 = consulta(c);
+let url3;
+for (let i = 0; i < 50 && !url3; i++) { await new Promise(r => setTimeout(r, 100)); url3 = (await call(c, "hubsoft_servidores", {})).json[0].autenticacao.pagina_2fa; }
+est = (await req(url3 + "/estado")).json;
+h = await req(url3 + "/enviar", { method: "POST", body: { chave: est[0].chave, cancelar: true } });
+assert.equal(h.json.estado, "cancelado");
+r = await emCurso2;
+assert.equal(r.err, true); assert.match(r.text, /hubsoft_conectar/);
+r = await consulta(c);
+assert.equal(r.err, true); assert.doesNotMatch(r.text, /pendente/, "não reabre a página logo após cancelar");
+await c.close();
+
 srv.close();
 console.log(`✅ auth ok — ${grants.length} chamadas a /oauth/token`);

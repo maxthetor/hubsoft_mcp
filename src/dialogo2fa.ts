@@ -6,12 +6,13 @@ import { spawn, spawnSync } from "node:child_process";
  * Ordem (HUBSOFT_2FA_DIALOGO=auto, padrão):
  *  1. HUBSOFT_2FA_COMANDO, se definido (ex.: `op item get "Hubsoft" --otp`);
  *  2. prompt no terminal (só na CLI, com TTY);
- *  3. janela nativa do sistema (Windows: WinForms; macOS: osascript; Linux: zenity/kdialog);
+ *  3. página local no navegador (desktop) — não bloqueia: o login termina quando o código chega;
  *  4. MCP elicitation, se o cliente declarar suporte (Claude Code CLI, VS Code…).
- * O Claude Desktop/Cowork ainda não mostra elicitation, por isso a janela vem antes.
+ * O Claude Desktop/Cowork ainda não mostra elicitation, por isso o navegador vem antes.
  *
- * Modos: auto | janela | elicitation | off. Os pedidos são serializados (uma janela por
- * vez) e, se o usuário cancelar, a base não volta a perguntar por 10 minutos.
+ * Modos: auto | navegador | janela | elicitation | off. "janela" (diálogo nativo) bloqueia a
+ * ferramenta até a resposta, então só é usada se pedida. Se o usuário cancelar, a base não
+ * volta a perguntar por 10 minutos.
  */
 
 export interface PedidoInfo {
@@ -23,8 +24,14 @@ export interface PedidoInfo {
   erro?: string;
 }
 
-/** Devolve o código digitado, ou undefined se o usuário cancelou / não há como perguntar. */
+/** Resposta de quem perguntou: o usuário cancelou. */
+export const CANCELAR = "\u0000cancelou";
+
+/** Devolve o código digitado, CANCELAR, ou undefined se este meio não pôde perguntar. */
 export type Perguntador = (info: PedidoInfo) => Promise<string | undefined>;
+
+/** Um meio de pedir o código: perguntador direto ou a página do navegador. */
+export type Meio = { nome: string; pagina: true } | { nome: string; pagina?: false; perguntar: Perguntador };
 
 const TEMPO_LIMITE_MS = 120_000;
 const ESPERA_CANCELADO_MS = 10 * 60_000;
@@ -38,7 +45,7 @@ export function configurarPerguntador(fn: Perguntador, opts: { antesDaJanela: bo
 
 function modo(): string {
   const v = (process.env.HUBSOFT_2FA_DIALOGO ?? "").trim().toLowerCase();
-  return ["auto", "janela", "elicitation", "off"].includes(v) ? v : "auto";
+  return ["auto", "navegador", "janela", "elicitation", "off"].includes(v) ? v : "auto";
 }
 
 export function extrairCodigo(s: string | undefined): string | undefined {
@@ -54,12 +61,12 @@ function textos(i: PedidoInfo) {
   return { titulo, msg };
 }
 
-function executar(cmd: string, args: string[], env: Record<string, string>, shell = false): Promise<{ code: number | null; out: string }> {
+function executar(cmd: string, args: string[], env: Record<string, string>, shell = false, ocultar = true): Promise<{ code: number | null; out: string }> {
   return new Promise((resolve) => {
     let out = "";
     let p;
     try {
-      p = spawn(cmd, args, { env: { ...process.env, ...env }, windowsHide: true, shell, stdio: ["ignore", "pipe", "ignore"] });
+      p = spawn(cmd, args, { env: { ...process.env, ...env }, windowsHide: ocultar, shell, stdio: ["ignore", "pipe", "ignore"] });
     } catch {
       return resolve({ code: -1, out: "" });
     }
@@ -124,7 +131,9 @@ async function janela(i: PedidoInfo): Promise<string | undefined> {
   let r;
   if (tipo === "windows") {
     const enc = Buffer.from(PS, "utf16le").toString("base64");
-    r = await executar("powershell.exe", ["-NoProfile", "-NonInteractive", "-STA", "-ExecutionPolicy", "Bypass", "-EncodedCommand", enc], env);
+    // windowsHide=false: com SW_HIDE no STARTUPINFO o Windows esconde também a primeira janela do processo
+    // (o próprio formulário). O console do PowerShell fica oculto por -WindowStyle Hidden.
+    r = await executar("powershell.exe", ["-NoProfile", "-NonInteractive", "-STA", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-EncodedCommand", enc], env, false, false);
   } else if (tipo === "macos") {
     r = await executar("osascript", OSA.flatMap((l) => ["-e", l]), env);
   } else if (tipo === "zenity") {
@@ -132,7 +141,7 @@ async function janela(i: PedidoInfo): Promise<string | undefined> {
   } else if (tipo === "kdialog") {
     r = await executar("kdialog", ["--title", titulo, "--inputbox", msg], env);
   } else return undefined;
-  return r.code === 0 ? extrairCodigo(r.out) : undefined;
+  return r.code === 0 ? extrairCodigo(r.out) ?? CANCELAR : CANCELAR;
 }
 
 async function comandoExterno(i: PedidoInfo): Promise<string | undefined> {
@@ -142,44 +151,36 @@ async function comandoExterno(i: PedidoInfo): Promise<string | undefined> {
   return r.code === 0 ? extrairCodigo(r.out) : undefined;
 }
 
-/** Meios disponíveis, na ordem em que serão tentados (para diagnóstico). */
-export function meiosDisponiveis(): string[] {
-  const m = modo();
-  if (m === "off") return [];
-  const lista: string[] = [];
+/** Há área de trabalho para abrir o navegador? */
+export function temDesktop(): boolean {
+  if (process.platform === "win32" || process.platform === "darwin") return true;
+  return !!(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
+}
+
+function comandoDefinido() {
   const cmd = process.env.HUBSOFT_2FA_COMANDO?.trim();
-  if (m === "auto" && cmd && !/^\$\{[^}]+\}$/.test(cmd)) lista.push("comando");
-  if (interativo?.antesDaJanela && m === "auto") lista.push(interativo.nome);
-  if ((m === "auto" || m === "janela") && janelaDisponivel()) lista.push(`janela (${janelaDisponivel()})`);
-  if (interativo && !interativo.antesDaJanela && (m === "auto" || m === "elicitation")) lista.push(interativo.nome);
+  return !!cmd && !/^\$\{[^}]+\}$/.test(cmd);
+}
+
+/** Meios de pedir o código, na ordem em que serão tentados. */
+export function meios(): Meio[] {
+  const m = modo();
+  const lista: Meio[] = [];
+  if (m === "off") return lista;
+  if (m === "auto" && comandoDefinido()) lista.push({ nome: "comando", perguntar: comandoExterno });
+  if (m === "auto" && interativo?.antesDaJanela) lista.push({ nome: interativo.nome, perguntar: interativo.fn });
+  if (m === "janela" && janelaDisponivel()) lista.push({ nome: `janela (${janelaDisponivel()})`, perguntar: janela });
+  if ((m === "auto" && temDesktop()) || m === "navegador") lista.push({ nome: "navegador", pagina: true });
+  if (interativo && !interativo.antesDaJanela && (m === "auto" || m === "elicitation")) {
+    lista.push({ nome: interativo.nome, perguntar: interativo.fn });
+  }
   return lista;
 }
 
-/** Pede o código pelos meios disponíveis; undefined = cancelado ou sem meio. */
-export async function pedirCodigo(i: PedidoInfo): Promise<string | undefined> {
-  const m = modo();
-  if (m === "off") return undefined;
-  const tentativas: Array<() => Promise<string | undefined>> = [];
-  if (m === "auto") tentativas.push(() => comandoExterno(i));
-  if (interativo?.antesDaJanela && m === "auto") tentativas.push(() => interativo!.fn(i));
-  if ((m === "auto" || m === "janela") && janelaDisponivel()) {
-    // com janela, um "Cancelar" é a resposta final: não abre outro meio por cima
-    tentativas.push(async () => (await janela(i)) ?? CANCELOU);
-  }
-  if (interativo && !interativo.antesDaJanela && (m === "auto" || m === "elicitation")) tentativas.push(() => interativo!.fn(i));
-  for (const t of tentativas) {
-    try {
-      const c = await t();
-      if (c === CANCELOU) return undefined;
-      const cod = extrairCodigo(c);
-      if (cod) return cod;
-    } catch {
-      /* tenta o próximo meio */
-    }
-  }
-  return undefined;
+/** Nomes dos meios disponíveis (diagnóstico). */
+export function meiosDisponiveis(): string[] {
+  return meios().map((x) => x.nome);
 }
-const CANCELOU = "\u0000cancelou";
 
 // ---- serialização e espera após cancelamento ----
 let fila: Promise<unknown> = Promise.resolve();

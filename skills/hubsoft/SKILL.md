@@ -64,7 +64,7 @@ Alguns provedores têm mais de uma base Hubsoft (ex.: `base_pf`, `base_pj`, `bas
 
 ## Login com 2FA
 
-Quando o login exige 2FA, o próprio MCP/CLI pede o código numa janela (ou no terminal). Só se isso falhar e a mensagem citar `hubsoft_conectar`, **peça ao usuário** o código de 6 dígitos do app autenticador (nunca invente) e chame `hubsoft_conectar` (ou `hubsoft conectar --servidor <base> --codigo_2fa <código>`). Depois disso o token fica salvo e o código não é mais pedido.
+Quando o login exige 2FA, o próprio MCP abre uma página no navegador (a CLI pergunta no terminal). Se a resposta disser "Login 2FA pendente", mostre o link ao usuário e repita a consulta depois que ele conectar. Só se isso falhar e a mensagem citar `hubsoft_conectar`, **peça ao usuário** o código de 6 dígitos do app autenticador (nunca invente) e chame `hubsoft_conectar` (ou `hubsoft conectar --servidor <base> --codigo_2fa <código>`). Depois disso o token fica salvo e o código não é mais pedido.
 
 ## Ações que alteram dados
 

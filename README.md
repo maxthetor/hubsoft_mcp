@@ -57,11 +57,12 @@ O administrador do provedor precisa:
 
 Funciona do mesmo jeito que no MCP oficial do Hubsoft. O código do app autenticador vai no campo `one_time_password` do login OAuth, e **só é pedido no primeiro acesso**:
 
-1. Na primeira vez, quando o Hubsoft recusa o login (HTTP 401), **o MCP abre uma janela pedindo o código**, com o nome e o endereço da base. Digite o código e clique em Conectar. A mesma consulta continua normalmente.
-   - **Windows:** uma caixa de diálogo sempre na frente. **macOS:** um `display dialog`. **Linux:** zenity ou kdialog, se houver interface gráfica.
-   - **Sem interface gráfica:** usa o formulário MCP (*elicitation*) do cliente, se ele suportar (Claude Code CLI, VS Code). O Claude Desktop/Cowork ainda não mostra elicitation, por isso a janela vem antes.
-   - **Na CLI com terminal:** pergunta no próprio terminal.
-   - Com várias bases, as janelas aparecem uma de cada vez. Um código recusado é pedido de novo, até 3 vezes. Se você **cancelar**, a base não pergunta de novo por 10 minutos.
+1. Na primeira vez, quando o Hubsoft recusa o login (HTTP 401), **o MCP abre uma página no seu navegador** (`http://127.0.0.1:<porta>/2fa/<token aleatório>`) com um campo de código para cada base que precisa de 2FA.
+   - **Se você digitar em até 45 s:** a consulta continua sozinha.
+   - **Se demorar mais:** a ferramenta responde "Login 2FA pendente" com o link, e a página continua valendo. Quando você envia o código, o login é concluído e salvo, e é só repetir a consulta.
+   - **Segurança:** a página só escuta em `127.0.0.1`, exige o token aleatório e confere o cabeçalho `Host`.
+   - Um código recusado mostra o erro e deixa tentar de novo. Se você **cancelar**, a base não pergunta por 10 minutos.
+   - **Sem área de trabalho** (servidor, SSH): usa o formulário MCP (*elicitation*) do cliente, se ele suportar (Claude Code CLI, VS Code). Na CLI com terminal, pergunta no próprio terminal.
    - **Alternativa manual:** `hubsoft_conectar { servidor: "base_pf", codigo_2fa: "123456" }`, ou pela CLI `hubsoft conectar --servidor base_pf --codigo_2fa 123456`.
 2. O access token (30 dias) e o `refresh_token` ficam salvos em `~/.config/hubsoft/tokens.json` (permissão 0600). Quando o token vence, o MCP renova pelo refresh, sem pedir código. O refresh é de uso único: o novo é gravado na hora.
 3. O código só volta a ser pedido se o refresh expirar ou for revogado.
@@ -114,7 +115,7 @@ Com uma base só, nada muda: as respostas são as mesmas da v0.3.
 Nos exemplos abaixo, `HUBSOFT_MCP` é o comando do servidor:
 
 ```
-npx -y github:maxthetor/hubsoft_mcp#v0.9.0
+npx -y github:maxthetor/hubsoft_mcp#v0.10.0
 ```
 
 Ou clone o repositório e use `node /caminho/hubsoft_mcp/server/hubsoft-mcp.mjs`.
@@ -143,7 +144,7 @@ Baixe o `hubsoft-mcp.mcpb` da [última release](https://github.com/maxthetor/hub
   "mcp": {
     "hubsoft": {
       "type": "local",
-      "command": ["npx", "-y", "github:maxthetor/hubsoft_mcp#v0.9.0"],
+      "command": ["npx", "-y", "github:maxthetor/hubsoft_mcp#v0.10.0"],
       "enabled": true,
       "environment": {
         "HUBSOFT_URL": "https://api.seuprovedor.hubsoft.com.br",
@@ -168,7 +169,7 @@ Skill: copie `skills/hubsoft/` para `~/.config/opencode/skills/hubsoft/`. O Open
   "mcpServers": {
     "hubsoft": {
       "command": "npx",
-      "args": ["-y", "github:maxthetor/hubsoft_mcp#v0.9.0"],
+      "args": ["-y", "github:maxthetor/hubsoft_mcp#v0.10.0"],
       "env": {
         "HUBSOFT_URL": "https://api.seuprovedor.hubsoft.com.br",
         "HUBSOFT_CLIENT_ID": "...",
@@ -197,7 +198,7 @@ Skill: `.cursor/skills/hubsoft/` (Cursor) ou `~/.gemini/skills/hubsoft/` (Gemini
     "hubsoft": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "github:maxthetor/hubsoft_mcp#v0.9.0"],
+      "args": ["-y", "github:maxthetor/hubsoft_mcp#v0.10.0"],
       "env": {
         "HUBSOFT_URL": "https://api.seuprovedor.hubsoft.com.br",
         "HUBSOFT_CLIENT_ID": "...",
@@ -219,7 +220,7 @@ Skill: `.github/skills/hubsoft/`.
 ```toml
 [mcp_servers.hubsoft]
 command = "npx"
-args = ["-y", "github:maxthetor/hubsoft_mcp#v0.9.0"]
+args = ["-y", "github:maxthetor/hubsoft_mcp#v0.10.0"]
 env = { HUBSOFT_URL = "https://api.seuprovedor.hubsoft.com.br", HUBSOFT_CLIENT_ID = "...", HUBSOFT_CLIENT_SECRET = "...", HUBSOFT_USERNAME = "voce.api@provedor.com.br", HUBSOFT_PASSWORD = "..." }
 ```
 
@@ -255,7 +256,7 @@ node scripts/hubsoft.mjs graphql --query '{ pops(first: 10) { data { id_pop } } 
 | `hubsoft_graphql_consultas` | Consultas GraphQL disponíveis **no seu Hubsoft**, lidas ao vivo |
 | `hubsoft_graphql_tipo` | Campos de um tipo do esquema |
 | `hubsoft_graphql` | Relatórios por período, POPs, CPEs, NFS-e, sessões RADIUS… |
-| `hubsoft_conectar` | Login com 2FA manual (normalmente não é preciso: uma janela pede o código sozinha) |
+| `hubsoft_conectar` | Login com 2FA manual (normalmente não é preciso: uma página no navegador pede o código sozinha) |
 | `hubsoft_cpe_iniciar_gerenciamento` | Parâmetros gerenciáveis da CPE via ACS (Wi-Fi etc.), senhas mascaradas |
 | `hubsoft_desbloqueio_confianca` ✏️ | Desbloqueio em confiança |
 | `hubsoft_enviar_fatura_email` ✏️ | Envia fatura por e-mail |
@@ -311,7 +312,9 @@ Na simulação, `hubsoft_desvincular_cpe` mostra o rollback pronto: `configurar_
 | `HUBSOFT_USERNAME` | — | **Seu** usuário de API |
 | `HUBSOFT_PASSWORD` | — | **Sua** senha |
 | `HUBSOFT_OTP_SECRET` | — | Opcional: semente 2FA (base32 ou `otpauth://`) para gerar o código sozinho. Sem ela, use `hubsoft_conectar` |
-| `HUBSOFT_2FA_DIALOGO` | `auto` | Como pedir o código 2FA: `auto` (comando → terminal → janela → elicitation), `janela`, `elicitation` ou `off` |
+| `HUBSOFT_2FA_DIALOGO` | `auto` | Como pedir o código 2FA: `auto` (comando → terminal → navegador → elicitation), `navegador`, `janela` (diálogo nativo; bloqueia até a resposta), `elicitation` ou `off` |
+| `HUBSOFT_2FA_ESPERA_S` | `45` | Quanto a consulta espera pelo código digitado na página antes de responder "pendente" |
+| `HUBSOFT_2FA_ABRIR` | `true` | `false` não abre o navegador sozinho (o link vem na resposta) |
 | `HUBSOFT_2FA_COMANDO` | — | Comando que imprime o código, ex.: `op item get "Hubsoft" --otp` (1Password). Recebe `HUBSOFT_2FA_BASE`, `HUBSOFT_2FA_HOST` e `HUBSOFT_2FA_USUARIO` |
 | `HUBSOFT_TOKENS` | `~/.config/hubsoft/tokens.json` | Onde os tokens OAuth ficam salvos; `off` guarda só em memória (o 2FA será pedido a cada reinício) |
 | `HUBSOFT_PERMITIR_ESCRITA` | `false` | `true` habilita as ferramentas ✏️ em todas as bases. Por base: `HUBSOFT_2_PERMITIR_ESCRITA`… ou `"permitir_escrita"` no `servidores.json` (a configuração por base vence a global). O legado `HUBSOFT_READ_ONLY=false` continua aceito |

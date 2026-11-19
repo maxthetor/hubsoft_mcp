@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "hubsoft-mcp",
   "display_name": "Hubsoft (não oficial)",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Consulte uma ou várias bases do ERP Hubsoft (clientes, bloqueados, faturas, RADIUS) com as permissões do seu próprio usuário.",
   "long_description": "Servidor MCP não oficial para o Hubsoft, ERP de provedores de internet. Cada pessoa usa o próprio login do Hubsoft; as credenciais ficam só no computador dela. Modo somente leitura por padrão.",
   "author": {
@@ -345,7 +345,7 @@
     "comando_2fa": {
       "type": "string",
       "title": "Comando que fornece o código 2FA (opcional)",
-      "description": "Ex.: op item get \"Hubsoft\" --otp. Recebe HUBSOFT_2FA_BASE/HOST/USUARIO. Sem ele, uma janela pede o código quando necessário",
+      "description": "Ex.: op item get \"Hubsoft\" --otp. Recebe HUBSOFT_2FA_BASE/HOST/USUARIO. Sem ele, uma página no navegador pede o código quando necessário",
       "required": false,
       "default": ""
     }
