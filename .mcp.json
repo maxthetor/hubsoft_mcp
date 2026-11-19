@@ -30,7 +30,10 @@
         "HUBSOFT_GRAPHQL_PATH": "${user_config.graphql_path}",
         "HUBSOFT_CONFIG": "${user_config.arquivo_servidores}",
         "HUBSOFT_PERMITIR_ESCRITA": "${user_config.permitir_escrita}",
-        "HUBSOFT_AUDITORIA": "${user_config.arquivo_auditoria}"
+        "HUBSOFT_AUDITORIA": "${user_config.arquivo_auditoria}",
+        "HUBSOFT_OTP_SECRET": "${user_config.otp_secret}",
+        "HUBSOFT_2_OTP_SECRET": "${user_config.otp_secret_2}",
+        "HUBSOFT_3_OTP_SECRET": "${user_config.otp_secret_3}"
       }
     }
   }

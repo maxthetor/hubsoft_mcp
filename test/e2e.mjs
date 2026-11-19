@@ -79,7 +79,7 @@ const srv = http.createServer((q, r) => { let b = ""; q.on("data", d => b += d);
 }); }).listen(0);
 await new Promise(r => srv.once("listening", r));
 
-const t = new StdioClientTransport({ command: "node", args: ["server/hubsoft-mcp.mjs"], stderr: "pipe", env: { ...process.env,
+const t = new StdioClientTransport({ command: "node", args: ["server/hubsoft-mcp.mjs"], stderr: "pipe", env: { ...process.env, HUBSOFT_TOKENS: "off",
   HUBSOFT_URL: `http://127.0.0.1:${srv.address().port}`, HUBSOFT_CLIENT_ID: "1", HUBSOFT_CLIENT_SECRET: "s", HUBSOFT_USERNAME: "u", HUBSOFT_PASSWORD: "p" } });
 const c = new Client({ name: "e2e", version: "0" }); await c.connect(t);
 const names = (await c.listTools()).tools.map(x => x.name);

@@ -18,7 +18,7 @@ await new Promise(r => srv.once("listening", r));
 const dir = mkdtempSync(join(tmpdir(), "hs-"));
 const envFile = join(dir, "hubsoft.env");
 writeFileSync(envFile, `HUBSOFT_URL=http://127.0.0.1:${srv.address().port}\nHUBSOFT_CLIENT_ID=1\nHUBSOFT_CLIENT_SECRET="s"\nHUBSOFT_USERNAME=u\nHUBSOFT_PASSWORD='p'\n`);
-const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("HUBSOFT_")));
+const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("HUBSOFT_"))); env.HUBSOFT_TOKENS = "off";
 const cli = (...a) => new Promise(res => execFile("node", ["skills/hubsoft/scripts/hubsoft.mjs", ...a], { env, cwd: dir.startsWith("/") ? process.cwd() : undefined }, (e, out, err) => res({ code: e?.code ?? 0, out, err })));
 
 let r = await cli("ferramentas");

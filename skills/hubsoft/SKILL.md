@@ -62,6 +62,10 @@ Alguns provedores têm mais de uma base Hubsoft (ex.: `base_pf`, `base_pj`, `bas
 - **Totais de período:** use `resumo_financeiro`. Com `data=pagamento`, as faturas pagas no período. Com `data=vencimento`, as que vencem no período, com pago, em aberto e vencido. Com várias bases, `consolidado_todas_bases` traz a soma geral.
 - **Tamanho:** peça só o necessário (`limit`, `first`, campos específicos no GraphQL). Respostas grandes são truncadas.
 
+## Login com 2FA
+
+Se uma ferramenta falhar na autenticação e a mensagem citar `hubsoft_conectar`, **peça ao usuário** o código de 6 dígitos do app autenticador (nunca invente) e chame `hubsoft_conectar` (ou `hubsoft conectar --servidor <base> --codigo_2fa <código>`). Depois disso o token fica salvo e o código não é mais pedido.
+
 ## Ações que alteram dados
 
 Só existem com `HUBSOFT_PERMITIR_ESCRITA=true`: `desbloqueio_confianca`, `enviar_fatura_email` e as ferramentas de CPE (`configurar_autenticacao`, `vincular_cpe`, `desvincular_cpe`, `reiniciar_cpe`, `restaurar_cpe`, `cpe_gerenciar`). Fluxo obrigatório:

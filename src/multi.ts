@@ -20,7 +20,7 @@ export function diagnosticoVariaveis(): string[] {
 const TODOS = new Set(["", "todos", "todas", "all", "*"]);
 
 /** Leituras que mesmo assim exigem uma única base (ex.: abrir gerenciamento ACS de uma CPE). */
-const UMA_BASE_LEITURA = new Set(["hubsoft_cpe_iniciar_gerenciamento"]);
+const UMA_BASE_LEITURA = new Set(["hubsoft_cpe_iniciar_gerenciamento", "hubsoft_conectar"]);
 
 /** Ferramentas que alteram dados: exigem exatamente um servidor (IDs não valem entre bases). */
 function exigeUmServidor(t: ToolDef) {
@@ -144,8 +144,9 @@ export function collectMultiTools(servers: HubsoftConfig[]): ToolDef[] {
       title: "Servidores (bases) Hubsoft configurados",
       description:
         "Lista as bases Hubsoft configuradas (nome, descrição, endereço, GraphQL). " +
-        "Com testar=true, verifica o login em cada uma. Use para saber em qual base procurar " +
-        "ou para diagnosticar falhas de acesso.",
+        "Mostra também o estado do login (token salvo, refresh, 2FA automático). Com testar=true, " +
+        "verifica o acesso em cada uma. Use para saber em qual base procurar ou para diagnosticar " +
+        "falhas de acesso; se o login falhar por 2FA, use hubsoft_conectar com o código do usuário.",
       inputSchema: {
         testar: z.boolean().optional().describe("Testa a autenticação em cada servidor."),
         diagnostico: z
@@ -166,13 +167,17 @@ export function collectMultiTools(servers: HubsoftConfig[]): ToolDef[] {
               usuario: s.username,
               graphql: s.graphqlPath || "desativado",
             };
+            const hc = clientes.get(s.nome)!;
             if (testar) {
               try {
-                const { res, body } = await clientes.get(s.nome)!.requestToken("json");
-                info.login = res.ok && body?.access_token ? "ok" : `falhou (HTTP ${res.status}: ${body?.msg ?? body?.error ?? ""})`;
+                info.autenticacao = await hc.testarLogin();
+                info.login = "ok";
               } catch (e) {
                 info.login = `falhou (${(e as Error).message})`;
+                info.autenticacao = hc.situacaoToken();
               }
+            } else {
+              info.autenticacao = hc.situacaoToken();
             }
             return info;
           }),

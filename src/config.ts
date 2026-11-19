@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { TOKENS_PADRAO } from "./tokens.js";
 
 /**
  * Configuração de UM servidor Hubsoft.
@@ -20,6 +21,13 @@ export interface HubsoftConfig {
   clientSecret: string;
   username: string;
   password: string;
+  /**
+   * Semente TOTP (base32 ou otpauth://) para gerar o código 2FA sozinho. Opcional:
+   * sem ela, o primeiro login de um usuário com 2FA é feito com hubsoft_conectar.
+   */
+  otpSecret?: string;
+  /** Arquivo onde os tokens OAuth ficam salvos ("" = só memória). */
+  tokens: string;
   /**
    * Quando true (padrão), ferramentas de escrita não são registradas.
    * É o inverso de HUBSOFT_PERMITIR_ESCRITA (global ou por base).
@@ -88,6 +96,7 @@ interface Bruto {
   senha?: string;
   graphql_path?: string;
   permitir_escrita?: string;
+  otp_secret?: string;
 }
 
 /** Escrita global: HUBSOFT_PERMITIR_ESCRITA=true (ou o legado HUBSOFT_READ_ONLY=false). */
@@ -105,7 +114,9 @@ export const AUDITORIA_PADRAO = join(homedir(), ".config", "hubsoft", "auditoria
 
 function globais() {
   const aud = env("HUBSOFT_AUDITORIA");
+  const tok = env("HUBSOFT_TOKENS");
   return {
+    tokens: tok === undefined ? TOKENS_PADRAO : tok.toLowerCase() === "off" ? "" : tok,
     readOnly: !escritaGlobal(),
     auditoria: aud === undefined ? AUDITORIA_PADRAO : aud.toLowerCase() === "off" ? "" : aud,
     maxResponseChars: Number(env("HUBSOFT_MAX_RESPONSE_CHARS") ?? 60000),
@@ -135,6 +146,7 @@ function lerArquivo(caminho: string): Bruto[] {
     senha: expandEnv(s.senha ?? s.password),
     graphql_path: expandEnv(s.graphql_path),
     permitir_escrita: s.permitir_escrita === undefined ? undefined : String(s.permitir_escrita),
+    otp_secret: expandEnv(s.otp_secret),
   }));
 }
 
@@ -153,6 +165,7 @@ function lerSlot(prefixo: string, origem: string): Bruto | undefined {
     graphql_path: env(`${prefixo}GRAPHQL_PATH`),
     // HUBSOFT_PERMITIR_ESCRITA do servidor 1 é a mesma variável global; as numeradas valem por base.
     permitir_escrita: prefixo === "HUBSOFT_" ? undefined : env(`${prefixo}PERMITIR_ESCRITA`),
+    otp_secret: env(`${prefixo}OTP_SECRET`),
   };
 }
 
@@ -210,6 +223,7 @@ export function loadServers(): HubsoftConfig[] {
       clientSecret: b.client_secret!,
       username: b.usuario!,
       password: b.senha!,
+      otpSecret: b.otp_secret,
       graphqlPath: graphqlPath(b.graphql_path ?? env("HUBSOFT_GRAPHQL_PATH")),
       ...g,
       // permissão por base sobrepõe a global

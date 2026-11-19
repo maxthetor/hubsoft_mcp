@@ -52,7 +52,7 @@ writeFileSync(arquivo, JSON.stringify({ servidores: [
 
 const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("HUBSOFT_")));
 async function conectar(extra = {}) {
-  const t = new StdioClientTransport({ command: "node", args: ["server/hubsoft-mcp.mjs"], stderr: "pipe", env: { ...baseEnv,
+  const t = new StdioClientTransport({ command: "node", args: ["server/hubsoft-mcp.mjs"], stderr: "pipe", env: { ...baseEnv, HUBSOFT_TOKENS: "off",
     HUBSOFT_NOME: "base_pf", HUBSOFT_DESCRICAO: "Clientes pessoa física", HUBSOFT_URL: url(pf), HUBSOFT_CLIENT_ID: "1", HUBSOFT_CLIENT_SECRET: "s", HUBSOFT_USERNAME: "u", HUBSOFT_PASSWORD: "p",
     HUBSOFT_2_NOME: "Base PJ", HUBSOFT_2_DESCRICAO: "Clientes pessoa jurídica", HUBSOFT_2_URL: url(pj), HUBSOFT_2_CLIENT_ID: "2", HUBSOFT_2_CLIENT_SECRET: "s", HUBSOFT_2_USERNAME: "u", HUBSOFT_2_PASSWORD: "p",
     HUBSOFT_3_URL: "${user_config.url_3}", // slot vazio do plugin: deve ser ignorado

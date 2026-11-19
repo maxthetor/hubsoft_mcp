@@ -5,6 +5,7 @@ import { registerStatus } from "./tools/status.js";
 import { registerResumo } from "./tools/resumo.js";
 import { registerHigiene } from "./tools/higiene.js";
 import { registerCpe } from "./tools/cpe.js";
+import { registerConexao } from "./tools/conexao.js";
 import { registerLeitura } from "./tools/leitura.js";
 import { registerEscrita } from "./tools/escrita.js";
 import { registerGraphql } from "./tools/graphql.js";
@@ -37,6 +38,7 @@ export function collectTools(hs: HubsoftClient): ToolDef[] {
     },
   } as unknown as McpServer;
 
+  registerConexao(collector, hs);
   registerSituacao(collector, hs);
   registerStatus(collector, hs);
   registerResumo(collector, hs);

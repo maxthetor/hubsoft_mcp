@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// hubsoft-mcp 0.7.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
+// hubsoft-mcp 0.8.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
 // Arquivo gerado por scripts/bundle.mjs a partir de src/. Não edite.
 import { createRequire as __cr } from "node:module"; const require = __cr(import.meta.url);
 var __defProp = Object.defineProperty;
@@ -9,8 +9,8 @@ var __export = (target, all) => {
 };
 
 // src/cli.ts
-import { homedir as homedir2 } from "node:os";
-import { join as join2 } from "node:path";
+import { homedir as homedir3 } from "node:os";
+import { join as join3 } from "node:path";
 
 // node_modules/zod/v4/classic/external.js
 var external_exports = {};
@@ -19730,11 +19730,97 @@ function date4(params) {
 }
 
 // src/config.ts
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync as existsSync2, readFileSync as readFileSync2 } from "node:fs";
+import { homedir as homedir2 } from "node:os";
+import { join as join2 } from "node:path";
+
+// src/tokens.ts
+import { createHmac } from "node:crypto";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+var TOKENS_PADRAO = join(homedir(), ".config", "hubsoft", "tokens.json");
+function chaveToken(baseUrl, clientId, username) {
+  return `${baseUrl}|${clientId}|${username.toLowerCase()}`;
+}
+var memoria = {};
+var TokenStore = class {
+  constructor(caminho) {
+    this.caminho = caminho;
+  }
+  caminho;
+  ler() {
+    if (!this.caminho) return memoria;
+    if (!existsSync(this.caminho)) return {};
+    try {
+      const j = JSON.parse(readFileSync(this.caminho, "utf8"));
+      return j && typeof j === "object" ? j : {};
+    } catch {
+      return {};
+    }
+  }
+  get(chave2) {
+    return this.ler()[chave2];
+  }
+  set(chave2, valor) {
+    if (!this.caminho) {
+      if (valor) memoria[chave2] = valor;
+      else delete memoria[chave2];
+      return;
+    }
+    const tudo = this.ler();
+    if (valor) tudo[chave2] = valor;
+    else delete tudo[chave2];
+    mkdirSync(dirname(this.caminho), { recursive: true, mode: 448 });
+    const tmp = `${this.caminho}.${process.pid}.tmp`;
+    writeFileSync(tmp, JSON.stringify(tudo, null, 2), { mode: 384 });
+    renameSync(tmp, this.caminho);
+    try {
+      chmodSync(this.caminho, 384);
+    } catch {
+    }
+  }
+};
+function normalizarSemente(v) {
+  let s = v.trim();
+  if (/^otpauth:\/\//i.test(s)) {
+    s = new URL(s).searchParams.get("secret") ?? "";
+  }
+  s = s.replace(/[\s-]/g, "").replace(/=+$/, "").toUpperCase();
+  if (!s || /[^A-Z2-7]/.test(s)) {
+    throw new Error("Semente 2FA inv\xE1lida: esperado base32 (letras A\u2013Z e d\xEDgitos 2\u20137) ou URI otpauth://.");
+  }
+  return s;
+}
+function base32(s) {
+  const alfabeto = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = 0;
+  let valor = 0;
+  const out2 = [];
+  for (const c of s) {
+    valor = valor << 5 | alfabeto.indexOf(c);
+    bits += 5;
+    if (bits >= 8) {
+      out2.push(valor >>> bits - 8 & 255);
+      bits -= 8;
+    }
+  }
+  return Buffer.from(out2);
+}
+function totp(semente, agoraMs = Date.now(), digitos = 6) {
+  const chave2 = base32(normalizarSemente(semente));
+  const contador = Math.floor(agoraMs / 1e3 / 30);
+  const buf = Buffer.alloc(8);
+  buf.writeBigUInt64BE(BigInt(contador));
+  const h = createHmac("sha1", chave2).update(buf).digest();
+  const o = h[h.length - 1] & 15;
+  const n = (h[o] & 127) << 24 | h[o + 1] << 16 | h[o + 2] << 8 | h[o + 3];
+  return String(n % 10 ** digitos).padStart(digitos, "0");
+}
+
+// src/config.ts
 var MAX_SLOTS = 9;
-var ARQUIVO_PADRAO = join(homedir(), ".config", "hubsoft", "servidores.json");
+var ARQUIVO_PADRAO = join2(homedir2(), ".config", "hubsoft", "servidores.json");
 function env(name) {
   const v = process.env[name]?.trim();
   if (!v || /^\$\{[^}]+\}$/.test(v)) return void 0;
@@ -19765,10 +19851,12 @@ function simNao(v) {
   if (v === void 0) return void 0;
   return ["1", "true", "sim", "yes", "on"].includes(v.trim().toLowerCase());
 }
-var AUDITORIA_PADRAO = join(homedir(), ".config", "hubsoft", "auditoria.jsonl");
+var AUDITORIA_PADRAO = join2(homedir2(), ".config", "hubsoft", "auditoria.jsonl");
 function globais() {
   const aud = env("HUBSOFT_AUDITORIA");
+  const tok = env("HUBSOFT_TOKENS");
   return {
+    tokens: tok === void 0 ? TOKENS_PADRAO : tok.toLowerCase() === "off" ? "" : tok,
     readOnly: !escritaGlobal(),
     auditoria: aud === void 0 ? AUDITORIA_PADRAO : aud.toLowerCase() === "off" ? "" : aud,
     maxResponseChars: Number(env("HUBSOFT_MAX_RESPONSE_CHARS") ?? 6e4),
@@ -19778,7 +19866,7 @@ function globais() {
 function lerArquivo(caminho) {
   let json2;
   try {
-    json2 = JSON.parse(readFileSync(caminho, "utf8"));
+    json2 = JSON.parse(readFileSync2(caminho, "utf8"));
   } catch (e) {
     throw new Error(`N\xE3o foi poss\xEDvel ler ${caminho}: ${e.message}`);
   }
@@ -19796,7 +19884,8 @@ function lerArquivo(caminho) {
     usuario: expandEnv(s.usuario ?? s.username),
     senha: expandEnv(s.senha ?? s.password),
     graphql_path: expandEnv(s.graphql_path),
-    permitir_escrita: s.permitir_escrita === void 0 ? void 0 : String(s.permitir_escrita)
+    permitir_escrita: s.permitir_escrita === void 0 ? void 0 : String(s.permitir_escrita),
+    otp_secret: expandEnv(s.otp_secret)
   }));
 }
 function lerSlot(prefixo, origem) {
@@ -19813,7 +19902,8 @@ function lerSlot(prefixo, origem) {
     senha: env(`${prefixo}PASSWORD`),
     graphql_path: env(`${prefixo}GRAPHQL_PATH`),
     // HUBSOFT_PERMITIR_ESCRITA do servidor 1 é a mesma variável global; as numeradas valem por base.
-    permitir_escrita: prefixo === "HUBSOFT_" ? void 0 : env(`${prefixo}PERMITIR_ESCRITA`)
+    permitir_escrita: prefixo === "HUBSOFT_" ? void 0 : env(`${prefixo}PERMITIR_ESCRITA`),
+    otp_secret: env(`${prefixo}OTP_SECRET`)
   };
 }
 function loadServers() {
@@ -19824,7 +19914,7 @@ function loadServers() {
     const s = lerSlot(`HUBSOFT_${i}_`, `vari\xE1veis HUBSOFT_${i}_*`);
     if (s) brutos.push(s);
   }
-  const arquivo = env("HUBSOFT_CONFIG") ?? (existsSync(ARQUIVO_PADRAO) ? ARQUIVO_PADRAO : void 0);
+  const arquivo = env("HUBSOFT_CONFIG") ?? (existsSync2(ARQUIVO_PADRAO) ? ARQUIVO_PADRAO : void 0);
   if (arquivo) brutos.push(...lerArquivo(arquivo));
   if (!brutos.length) {
     throw new Error(
@@ -19856,6 +19946,7 @@ function loadServers() {
       clientSecret: b.client_secret,
       username: b.usuario,
       password: b.senha,
+      otpSecret: b.otp_secret,
       graphqlPath: graphqlPath(b.graphql_path ?? env("HUBSOFT_GRAPHQL_PATH")),
       ...g,
       // permissão por base sobrepõe a global
@@ -19868,7 +19959,7 @@ function loadEnvFiles(files) {
   for (const f of files) {
     let text;
     try {
-      text = readFileSync(f, "utf8");
+      text = readFileSync2(f, "utf8");
     } catch {
       continue;
     }
@@ -19897,25 +19988,36 @@ var HubsoftError = class extends Error {
   status;
   body;
 };
+var MARGEM_MS = 5 * 6e4;
+var DICA_2FA = "Se este usu\xE1rio usa 2FA, fa\xE7a o primeiro login com a ferramenta hubsoft_conectar (servidor + codigo_2fa do app autenticador) ou configure a semente em HUBSOFT_OTP_SECRET. Depois disso o token fica salvo e \xE9 renovado sozinho.";
 var HubsoftClient = class {
   constructor(cfg) {
     this.cfg = cfg;
+    this.store = new TokenStore(cfg.tokens ?? "");
+    this.chave = chaveToken(cfg.baseUrl, cfg.clientId, cfg.username);
   }
   cfg;
   token;
   pendingAuth;
+  store;
+  chave;
   get config() {
     return this.cfg;
   }
-  /** Faz a chamada de token em JSON ou form-urlencoded (o Hubsoft aceita ambos em versões diferentes). */
-  async requestToken(format) {
+  /** POST /oauth/token em JSON ou form-urlencoded (o Hubsoft aceita ambos em versões diferentes). */
+  async requestToken(format, extra = {}) {
     const fields = {
       grant_type: "password",
       client_id: this.cfg.clientId,
       client_secret: this.cfg.clientSecret,
       username: this.cfg.username,
-      password: this.cfg.password
+      password: this.cfg.password,
+      ...extra
     };
+    if (fields.grant_type === "refresh_token") {
+      delete fields.username;
+      delete fields.password;
+    }
     const res = await fetch(`${this.cfg.baseUrl}/oauth/token`, {
       method: "POST",
       headers: {
@@ -19926,35 +20028,117 @@ var HubsoftClient = class {
     });
     return { res, body: await safeJson(res) };
   }
-  async authenticate() {
-    let { res, body } = await this.requestToken("json");
-    if (!res.ok || !body?.access_token) {
-      const alt = await this.requestToken("form");
-      if (alt.res.ok && alt.body?.access_token) ({ res, body } = alt);
+  async pedirToken(extra) {
+    let r = await this.requestToken("json", extra);
+    if (!r.body?.access_token && ![401, 429].includes(r.res.status)) {
+      const alt = await this.requestToken("form", extra);
+      if (alt.body?.access_token) r = alt;
     }
-    if (!res.ok || !body?.access_token) {
-      throw new HubsoftError(
-        `Falha na autentica\xE7\xE3o no Hubsoft (HTTP ${res.status}). Confira URL, client_id, client_secret, usu\xE1rio e senha.`,
-        res.status,
-        body
-      );
-    }
+    return r;
+  }
+  /** Grava o token recebido (memória + arquivo) e devolve o estado. */
+  guardar(body) {
     const ttlSec = Number(body.expires_in ?? 3600);
-    return {
-      header: `${body.token_type ?? "Bearer"} ${body.access_token}`,
-      // renova 60 s antes de expirar
-      expiresAt: Date.now() + Math.max(ttlSec - 60, 30) * 1e3
+    const tipo = body.token_type ?? "Bearer";
+    const anterior = this.store.get(this.chave);
+    const salvo = {
+      token_type: tipo,
+      access_token: body.access_token,
+      expires_at: Date.now() + ttlSec * 1e3,
+      refresh_token: body.refresh_token ?? anterior?.refresh_token,
+      refresh_emitido_em: body.refresh_token ? (/* @__PURE__ */ new Date()).toISOString() : anterior?.refresh_emitido_em,
+      atualizado_em: (/* @__PURE__ */ new Date()).toISOString()
     };
+    try {
+      this.store.set(this.chave, salvo);
+    } catch {
+    }
+    return this.estado(salvo);
+  }
+  estado(t) {
+    return { header: `${t.token_type} ${t.access_token}`, expiresAt: t.expires_at - MARGEM_MS, access: t.access_token };
+  }
+  falha(res, body, comOtp) {
+    const msg = body?.msg || body?.message || body?.error_description || body?.error || "";
+    const dica = res.status === 429 ? " Limite de autentica\xE7\xE3o atingido (30/min); aguarde." : comOtp ? " O c\xF3digo 2FA gerado pela semente foi recusado: confira HUBSOFT_OTP_SECRET e o rel\xF3gio do computador." : ` ${DICA_2FA}`;
+    return new HubsoftError(
+      `Falha na autentica\xE7\xE3o no Hubsoft (HTTP ${res.status}${msg ? `: ${msg}` : ""}). Confira URL, client_id, client_secret, usu\xE1rio e senha.` + dica,
+      res.status,
+      body
+    );
+  }
+  async authenticate(force) {
+    const salvo = this.store.get(this.chave);
+    if (salvo?.access_token && Date.now() < salvo.expires_at - MARGEM_MS) {
+      if (!force || salvo.access_token !== this.token?.access) return this.estado(salvo);
+    }
+    if (salvo?.refresh_token) {
+      const r3 = await this.pedirToken({ grant_type: "refresh_token", refresh_token: salvo.refresh_token });
+      if (r3.body?.access_token) return this.guardar(r3.body);
+      if (r3.res.status === 429) throw this.falha(r3.res, r3.body, false);
+      try {
+        this.store.set(this.chave, void 0);
+      } catch {
+      }
+    }
+    const extra = {};
+    if (this.cfg.otpSecret) extra.one_time_password = totp(this.cfg.otpSecret);
+    const r = await this.pedirToken(extra);
+    if (r.body?.access_token) return this.guardar(r.body);
+    throw this.falha(r.res, r.body, !!this.cfg.otpSecret);
   }
   async getToken(force = false) {
     if (!force && this.token && Date.now() < this.token.expiresAt) {
       return this.token.header;
     }
-    this.pendingAuth ??= this.authenticate().finally(() => {
+    this.pendingAuth ??= this.authenticate(force).finally(() => {
       this.pendingAuth = void 0;
     });
     this.token = await this.pendingAuth;
     return this.token.header;
+  }
+  /**
+   * Primeiro login de um usuário com 2FA: senha + código do app autenticador.
+   * O token e o refresh_token ficam salvos; os próximos logins não pedem código.
+   */
+  async conectar(codigo) {
+    let metodo;
+    if (codigo) {
+      const r = await this.pedirToken({ one_time_password: codigo });
+      if (!r.body?.access_token) {
+        const msg = r.body?.msg || r.body?.message || r.body?.error_description || r.body?.error || "";
+        throw new HubsoftError(
+          `Login com 2FA recusado (HTTP ${r.res.status}${msg ? `: ${msg}` : ""}). Confira usu\xE1rio, senha e o c\xF3digo (ele muda a cada 30 s; use um c\xF3digo novo).`,
+          r.res.status,
+          r.body
+        );
+      }
+      this.token = this.guardar(r.body);
+      metodo = "senha + c\xF3digo 2FA";
+    } else {
+      this.token = void 0;
+      await this.getToken(false);
+      metodo = this.cfg.otpSecret ? "token salvo, refresh ou semente 2FA" : "token salvo, refresh ou senha";
+    }
+    return { ok: true, metodo, ...this.situacaoToken() };
+  }
+  /** Estado da autenticação, sem expor tokens. */
+  situacaoToken() {
+    const t = this.store.get(this.chave);
+    const exp = t?.expires_at ?? (this.token ? this.token.expiresAt + MARGEM_MS : void 0);
+    return {
+      token_valido_ate: exp ? new Date(exp).toISOString() : null,
+      token_valido: !!exp && Date.now() < exp - MARGEM_MS,
+      refresh_token_salvo: !!t?.refresh_token,
+      refresh_emitido_em: t?.refresh_emitido_em ?? null,
+      codigo_2fa_automatico: !!this.cfg.otpSecret,
+      arquivo_tokens: this.cfg.tokens || "desativado (s\xF3 mem\xF3ria)"
+    };
+  }
+  /** Testa o acesso pelo fluxo normal (reaproveita o token; não gasta o refresh à toa). */
+  async testarLogin() {
+    await this.getToken(false);
+    return this.situacaoToken();
   }
   async request(method, path, opts = {}) {
     const url2 = new URL(this.cfg.baseUrl + (path.startsWith("/") ? path : `/${path}`));
@@ -20606,8 +20790,8 @@ function registerHigiene(server, hs) {
 }
 
 // src/tools/cpe.ts
-import { appendFileSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { appendFileSync, mkdirSync as mkdirSync2 } from "node:fs";
+import { dirname as dirname2 } from "node:path";
 var RELACOES = "interface,equipamento_conexao,interface_roteamento,equipamento_roteamento,cpes";
 var SEGREDO = /password|senha|secret|token/i;
 var normPhy = (s) => String(s ?? "").replace(/[^0-9a-z]/gi, "").toUpperCase();
@@ -20717,7 +20901,7 @@ function auditar(hs, registro) {
   const arq = hs.config.auditoria;
   if (!arq) return;
   try {
-    mkdirSync(dirname(arq), { recursive: true });
+    mkdirSync2(dirname2(arq), { recursive: true });
     appendFileSync(arq, JSON.stringify(semSegredos({ data_hora: (/* @__PURE__ */ new Date()).toISOString(), base: hs.config.nome, ...registro })) + "\n", { mode: 384 });
   } catch (e) {
     registro.aviso_auditoria = `Falha ao gravar auditoria em ${arq}: ${e.message}`;
@@ -21169,6 +21353,23 @@ function registerCpe(server, hs) {
   );
 }
 
+// src/tools/conexao.ts
+function registerConexao(server, hs) {
+  const max = hs.config.maxResponseChars;
+  server.registerTool(
+    "hubsoft_conectar",
+    {
+      title: "Conectar ao Hubsoft (login com 2FA)",
+      description: "Faz o login na base com usu\xE1rio, senha e, se o usu\xE1rio tiver autentica\xE7\xE3o em dois fatores, o c\xF3digo de 6 d\xEDgitos do app autenticador (codigo_2fa). O token fica salvo e \xE9 renovado sozinho, ent\xE3o o c\xF3digo s\xF3 \xE9 necess\xE1rio no primeiro acesso ou se o refresh expirar. Use quando outra ferramenta falhar na autentica\xE7\xE3o, PEDINDO o c\xF3digo ao usu\xE1rio \u2014 nunca invente um. Sem codigo_2fa, s\xF3 verifica/renova o acesso atual.",
+      inputSchema: {
+        codigo_2fa: external_exports.string().trim().regex(/^\d{6,8}$/, "o c\xF3digo 2FA tem 6 a 8 d\xEDgitos").optional().describe("C\xF3digo atual do app autenticador (Google Authenticator, Authy\u2026). Muda a cada 30 s.")
+      },
+      annotations: { readOnlyHint: true, idempotentHint: false, openWorldHint: true }
+    },
+    async ({ codigo_2fa }) => run(max, () => hs.conectar(codigo_2fa))
+  );
+}
+
 // src/tools/leitura.ts
 var READ = { readOnlyHint: true, openWorldHint: true };
 var busca = external_exports.string().describe(
@@ -21440,6 +21641,7 @@ function collectTools(hs) {
       defs.push({ name, config: config2, cb });
     }
   };
+  registerConexao(collector, hs);
   registerSituacao(collector, hs);
   registerStatus(collector, hs);
   registerResumo(collector, hs);
@@ -21452,7 +21654,7 @@ function collectTools(hs) {
 }
 
 // src/version.ts
-var VERSION = "0.7.0";
+var VERSION = "0.8.0";
 
 // src/multi.ts
 function diagnosticoVariaveis() {
@@ -21465,7 +21667,7 @@ function diagnosticoVariaveis() {
   return out2;
 }
 var TODOS = /* @__PURE__ */ new Set(["", "todos", "todas", "all", "*"]);
-var UMA_BASE_LEITURA = /* @__PURE__ */ new Set(["hubsoft_cpe_iniciar_gerenciamento"]);
+var UMA_BASE_LEITURA = /* @__PURE__ */ new Set(["hubsoft_cpe_iniciar_gerenciamento", "hubsoft_conectar"]);
 function exigeUmServidor(t) {
   return t.config.annotations?.readOnlyHint === false && t.name !== "hubsoft_graphql" || UMA_BASE_LEITURA.has(t.name);
 }
@@ -21548,7 +21750,7 @@ function collectMultiTools(servers) {
     name: "hubsoft_servidores",
     config: {
       title: "Servidores (bases) Hubsoft configurados",
-      description: "Lista as bases Hubsoft configuradas (nome, descri\xE7\xE3o, endere\xE7o, GraphQL). Com testar=true, verifica o login em cada uma. Use para saber em qual base procurar ou para diagnosticar falhas de acesso.",
+      description: "Lista as bases Hubsoft configuradas (nome, descri\xE7\xE3o, endere\xE7o, GraphQL). Mostra tamb\xE9m o estado do login (token salvo, refresh, 2FA autom\xE1tico). Com testar=true, verifica o acesso em cada uma. Use para saber em qual base procurar ou para diagnosticar falhas de acesso; se o login falhar por 2FA, use hubsoft_conectar com o c\xF3digo do usu\xE1rio.",
       inputSchema: {
         testar: external_exports.boolean().optional().describe("Testa a autentica\xE7\xE3o em cada servidor."),
         diagnostico: external_exports.boolean().optional().describe("Mostra a vers\xE3o e quais vari\xE1veis HUBSOFT_* o servidor recebeu (s\xF3 nomes e estado, sem valores).")
@@ -21565,13 +21767,17 @@ function collectMultiTools(servers) {
             usuario: s.username,
             graphql: s.graphqlPath || "desativado"
           };
+          const hc = clientes.get(s.nome);
           if (testar) {
             try {
-              const { res, body } = await clientes.get(s.nome).requestToken("json");
-              info.login = res.ok && body?.access_token ? "ok" : `falhou (HTTP ${res.status}: ${body?.msg ?? body?.error ?? ""})`;
+              info.autenticacao = await hc.testarLogin();
+              info.login = "ok";
             } catch (e) {
               info.login = `falhou (${e.message})`;
+              info.autenticacao = hc.situacaoToken();
             }
+          } else {
+            info.autenticacao = hc.situacaoToken();
           }
           return info;
         })
@@ -21793,7 +21999,8 @@ function toolsSemCredenciais() {
     graphqlPath: process.env.HUBSOFT_GRAPHQL_PATH === "off" ? "" : "/graphql/v1",
     maxResponseChars: 0,
     exposeSecrets: false,
-    auditoria: ""
+    auditoria: "",
+    tokens: ""
   });
   return collectTools(fake);
 }
@@ -21805,7 +22012,7 @@ async function main() {
     argv = argv.filter((_, i) => i !== envIdx && i !== envIdx + 1);
     if (!loadEnvFiles([file2]).length) throw new Error(`N\xE3o foi poss\xEDvel ler ${file2}`);
   } else {
-    loadEnvFiles([join2(process.cwd(), ".env"), join2(homedir2(), ".config", "hubsoft", ".env")]);
+    loadEnvFiles([join3(process.cwd(), ".env"), join3(homedir3(), ".config", "hubsoft", ".env")]);
   }
   const [cmd, ...rest] = argv;
   if (cmd === "--version" || cmd === "-v") return out(VERSION);

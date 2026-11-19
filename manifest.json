@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "hubsoft-mcp",
   "display_name": "Hubsoft (não oficial)",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Consulte uma ou várias bases do ERP Hubsoft (clientes, bloqueados, faturas, RADIUS) com as permissões do seu próprio usuário.",
   "long_description": "Servidor MCP não oficial para o Hubsoft, ERP de provedores de internet. Cada pessoa usa o próprio login do Hubsoft; as credenciais ficam só no computador dela. Modo somente leitura por padrão.",
   "author": {
@@ -50,7 +50,10 @@
         "HUBSOFT_CONFIG": "${user_config.arquivo_servidores}",
         "HUBSOFT_EXPOR_SENHAS": "${user_config.expor_senhas}",
         "HUBSOFT_PERMITIR_ESCRITA": "${user_config.permitir_escrita}",
-        "HUBSOFT_AUDITORIA": "${user_config.arquivo_auditoria}"
+        "HUBSOFT_AUDITORIA": "${user_config.arquivo_auditoria}",
+        "HUBSOFT_OTP_SECRET": "${user_config.otp_secret}",
+        "HUBSOFT_2_OTP_SECRET": "${user_config.otp_secret_2}",
+        "HUBSOFT_3_OTP_SECRET": "${user_config.otp_secret_3}"
       }
     }
   },
@@ -58,6 +61,10 @@
     {
       "name": "hubsoft_servidores",
       "description": "Lista as bases Hubsoft configuradas e testa o login em cada uma"
+    },
+    {
+      "name": "hubsoft_conectar",
+      "description": "Login com 2FA: código do app autenticador no primeiro acesso; token salvo e renovado sozinho"
     },
     {
       "name": "hubsoft_situacao_cliente",
@@ -189,6 +196,13 @@
       "sensitive": true,
       "required": true
     },
+    "otp_secret": {
+      "type": "string",
+      "title": "Servidor 1: semente 2FA (opcional)",
+      "description": "Só se o usuário tiver 2FA e você quiser login sem interação: semente base32 ou URI otpauth:// do QR code. Sem ela, use hubsoft_conectar com o código do app na primeira vez.",
+      "sensitive": true,
+      "required": false
+    },
     "nome_2": {
       "type": "string",
       "title": "Servidor 2: nome curto (opcional)",
@@ -234,6 +248,13 @@
       "sensitive": true,
       "required": false
     },
+    "otp_secret_2": {
+      "type": "string",
+      "title": "Servidor 2: semente 2FA (opcional)",
+      "description": "Só se o usuário tiver 2FA e você quiser login sem interação: semente base32 ou URI otpauth:// do QR code. Sem ela, use hubsoft_conectar com o código do app na primeira vez.",
+      "sensitive": true,
+      "required": false
+    },
     "nome_3": {
       "type": "string",
       "title": "Servidor 3: nome curto (opcional)",
@@ -276,6 +297,13 @@
       "type": "string",
       "title": "Servidor 3: sua senha (opcional)",
       "description": "Guardada no armazenamento seguro do sistema",
+      "sensitive": true,
+      "required": false
+    },
+    "otp_secret_3": {
+      "type": "string",
+      "title": "Servidor 3: semente 2FA (opcional)",
+      "description": "Só se o usuário tiver 2FA e você quiser login sem interação: semente base32 ou URI otpauth:// do QR code. Sem ela, use hubsoft_conectar com o código do app na primeira vez.",
       "sensitive": true,
       "required": false
     },

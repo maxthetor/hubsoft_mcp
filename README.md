@@ -53,7 +53,17 @@ O administrador do provedor precisa:
 1. criar um **cliente de API** (client ID e secret) e marcar **"Permite acesso à API GraphQL"**;
 2. fornecer a cada pessoa um **usuário com acesso à API**.
 
-> ⚠️ **Usuários com 2FA não autenticam pela API.** O login OAuth do Hubsoft não tem campo para o código. Crie um usuário de API por pessoa (ex.: `fulano.api@provedor.com.br`), sem 2FA, com senha forte e **o mesmo perfil de permissões** do usuário dela.
+### Usuários com 2FA
+
+Funciona do mesmo jeito que no MCP oficial do Hubsoft. O código do app autenticador vai no campo `one_time_password` do login OAuth, e **só é pedido no primeiro acesso**:
+
+1. Na primeira vez, as ferramentas avisam que o login falhou. O agente pede o código de 6 dígitos e chama `hubsoft_conectar { servidor: "base_pf", codigo_2fa: "123456" }`. Pela CLI: `hubsoft conectar --servidor base_pf --codigo_2fa 123456`.
+2. O access token (30 dias) e o `refresh_token` ficam salvos em `~/.config/hubsoft/tokens.json` (permissão 0600). Quando o token vence, o MCP renova pelo refresh, sem pedir código. O refresh é de uso único: o novo é gravado na hora.
+3. O código só volta a ser pedido se o refresh expirar ou for revogado.
+
+**Opcional, login sem interação:** informe a semente TOTP em `HUBSOFT_OTP_SECRET` (por base: `HUBSOFT_2_OTP_SECRET`… ou `"otp_secret"` no `servidores.json`). Aceita o texto base32 ou a URI `otpauth://` do QR code, e o código é gerado sozinho. Atenção: com a semente no mesmo computador que a senha, o segundo fator deixa de ser independente. Prefira `hubsoft_conectar`, a menos que precise de uso sem ninguém por perto.
+
+`hubsoft_servidores` mostra o estado de cada base (token válido até quando, refresh salvo, 2FA automático), sem expor tokens.
 
 Cada pessoa usa **o próprio login**. Não há "super usuário" compartilhado, e as credenciais ficam só no computador dela.
 
@@ -99,7 +109,7 @@ Com uma base só, nada muda: as respostas são as mesmas da v0.3.
 Nos exemplos abaixo, `HUBSOFT_MCP` é o comando do servidor:
 
 ```
-npx -y github:maxthetor/hubsoft_mcp#v0.7.0
+npx -y github:maxthetor/hubsoft_mcp#v0.8.0
 ```
 
 Ou clone o repositório e use `node /caminho/hubsoft_mcp/server/hubsoft-mcp.mjs`.
@@ -128,7 +138,7 @@ Baixe o `hubsoft-mcp.mcpb` da [última release](https://github.com/maxthetor/hub
   "mcp": {
     "hubsoft": {
       "type": "local",
-      "command": ["npx", "-y", "github:maxthetor/hubsoft_mcp#v0.7.0"],
+      "command": ["npx", "-y", "github:maxthetor/hubsoft_mcp#v0.8.0"],
       "enabled": true,
       "environment": {
         "HUBSOFT_URL": "https://api.seuprovedor.hubsoft.com.br",
@@ -153,7 +163,7 @@ Skill: copie `skills/hubsoft/` para `~/.config/opencode/skills/hubsoft/`. O Open
   "mcpServers": {
     "hubsoft": {
       "command": "npx",
-      "args": ["-y", "github:maxthetor/hubsoft_mcp#v0.7.0"],
+      "args": ["-y", "github:maxthetor/hubsoft_mcp#v0.8.0"],
       "env": {
         "HUBSOFT_URL": "https://api.seuprovedor.hubsoft.com.br",
         "HUBSOFT_CLIENT_ID": "...",
@@ -182,7 +192,7 @@ Skill: `.cursor/skills/hubsoft/` (Cursor) ou `~/.gemini/skills/hubsoft/` (Gemini
     "hubsoft": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "github:maxthetor/hubsoft_mcp#v0.7.0"],
+      "args": ["-y", "github:maxthetor/hubsoft_mcp#v0.8.0"],
       "env": {
         "HUBSOFT_URL": "https://api.seuprovedor.hubsoft.com.br",
         "HUBSOFT_CLIENT_ID": "...",
@@ -204,7 +214,7 @@ Skill: `.github/skills/hubsoft/`.
 ```toml
 [mcp_servers.hubsoft]
 command = "npx"
-args = ["-y", "github:maxthetor/hubsoft_mcp#v0.7.0"]
+args = ["-y", "github:maxthetor/hubsoft_mcp#v0.8.0"]
 env = { HUBSOFT_URL = "https://api.seuprovedor.hubsoft.com.br", HUBSOFT_CLIENT_ID = "...", HUBSOFT_CLIENT_SECRET = "...", HUBSOFT_USERNAME = "voce.api@provedor.com.br", HUBSOFT_PASSWORD = "..." }
 ```
 
@@ -240,6 +250,7 @@ node scripts/hubsoft.mjs graphql --query '{ pops(first: 10) { data { id_pop } } 
 | `hubsoft_graphql_consultas` | Consultas GraphQL disponíveis **no seu Hubsoft**, lidas ao vivo |
 | `hubsoft_graphql_tipo` | Campos de um tipo do esquema |
 | `hubsoft_graphql` | Relatórios por período, POPs, CPEs, NFS-e, sessões RADIUS… |
+| `hubsoft_conectar` | Login com 2FA (código do app no primeiro acesso; depois o token é renovado sozinho) |
 | `hubsoft_cpe_iniciar_gerenciamento` | Parâmetros gerenciáveis da CPE via ACS (Wi-Fi etc.), senhas mascaradas |
 | `hubsoft_desbloqueio_confianca` ✏️ | Desbloqueio em confiança |
 | `hubsoft_enviar_fatura_email` ✏️ | Envia fatura por e-mail |
@@ -294,12 +305,14 @@ Na simulação, `hubsoft_desvincular_cpe` mostra o rollback pronto: `configurar_
 | `HUBSOFT_CLIENT_SECRET` | — | Client secret do provedor |
 | `HUBSOFT_USERNAME` | — | **Seu** usuário de API |
 | `HUBSOFT_PASSWORD` | — | **Sua** senha |
+| `HUBSOFT_OTP_SECRET` | — | Opcional: semente 2FA (base32 ou `otpauth://`) para gerar o código sozinho. Sem ela, use `hubsoft_conectar` |
+| `HUBSOFT_TOKENS` | `~/.config/hubsoft/tokens.json` | Onde os tokens OAuth ficam salvos; `off` guarda só em memória (o 2FA será pedido a cada reinício) |
 | `HUBSOFT_PERMITIR_ESCRITA` | `false` | `true` habilita as ferramentas ✏️ em todas as bases. Por base: `HUBSOFT_2_PERMITIR_ESCRITA`… ou `"permitir_escrita"` no `servidores.json` (a configuração por base vence a global). O legado `HUBSOFT_READ_ONLY=false` continua aceito |
 | `HUBSOFT_AUDITORIA` | `~/.config/hubsoft/auditoria.jsonl` | Log JSONL das escritas executadas; `off` desativa |
 | `HUBSOFT_GRAPHQL_PATH` | `/graphql/v1` | `off` desativa o GraphQL |
 | `HUBSOFT_EXPOR_SENHAS` | `false` | `true` mostra senhas (ex.: PPPoE) nas respostas |
 | `HUBSOFT_MAX_RESPONSE_CHARS` | `60000` | Limite de tamanho das respostas |
-| `HUBSOFT_2_*` … `HUBSOFT_9_*` | — | Bases adicionais (mesmos sufixos: `NOME`, `DESCRICAO`, `URL`, `CLIENT_ID`, `CLIENT_SECRET`, `USERNAME`, `PASSWORD`, `GRAPHQL_PATH`) |
+| `HUBSOFT_2_*` … `HUBSOFT_9_*` | — | Bases adicionais (mesmos sufixos: `NOME`, `DESCRICAO`, `URL`, `CLIENT_ID`, `CLIENT_SECRET`, `USERNAME`, `PASSWORD`, `OTP_SECRET`, `GRAPHQL_PATH`, `PERMITIR_ESCRITA`) |
 | `HUBSOFT_CONFIG` | `~/.config/hubsoft/servidores.json` | Arquivo com a lista de bases |
 | `HUBSOFT_SERVIDOR` | primeira | Base usada por `npm run probe` e `npm run schema` |
 

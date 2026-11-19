@@ -1,7 +1,7 @@
 {
   "name": "hubsoft",
   "displayName": "Hubsoft (não oficial)",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Consulte uma ou várias bases do ERP Hubsoft com as permissões do seu próprio usuário: clientes, bloqueados, PPPoE, ONU, RADIUS, faturas, atendimentos e OS.",
   "author": {
     "name": "Marcelo",
@@ -66,6 +66,13 @@
       "required": true,
       "sensitive": true
     },
+    "otp_secret": {
+      "type": "string",
+      "title": "Servidor 1: semente 2FA (opcional)",
+      "description": "Só com 2FA, para login sem interação (base32 ou otpauth://). Sem ela, use hubsoft_conectar com o código do app",
+      "sensitive": true,
+      "required": false
+    },
     "nome_2": {
       "type": "string",
       "title": "Servidor 2: nome curto (opcional)",
@@ -111,6 +118,13 @@
       "required": false,
       "sensitive": true
     },
+    "otp_secret_2": {
+      "type": "string",
+      "title": "Servidor 2: semente 2FA (opcional)",
+      "description": "Só com 2FA, para login sem interação (base32 ou otpauth://). Sem ela, use hubsoft_conectar com o código do app",
+      "sensitive": true,
+      "required": false
+    },
     "nome_3": {
       "type": "string",
       "title": "Servidor 3: nome curto (opcional)",
@@ -155,6 +169,13 @@
       "description": "Guardada no armazenamento seguro do sistema",
       "required": false,
       "sensitive": true
+    },
+    "otp_secret_3": {
+      "type": "string",
+      "title": "Servidor 3: semente 2FA (opcional)",
+      "description": "Só com 2FA, para login sem interação (base32 ou otpauth://). Sem ela, use hubsoft_conectar com o código do app",
+      "sensitive": true,
+      "required": false
     },
     "graphql_path": {
       "type": "string",

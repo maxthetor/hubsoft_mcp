@@ -1,4 +1,5 @@
 import type { HubsoftConfig } from "./config.js";
+import { TokenStore, chaveToken, totp, type TokenSalvo } from "./tokens.js";
 
 export class HubsoftError extends Error {
   constructor(
@@ -14,36 +15,58 @@ export class HubsoftError extends Error {
 interface TokenState {
   header: string; // "Bearer xxx"
   expiresAt: number; // epoch ms
+  access: string;
 }
 
 type Query = Record<string, string | number | boolean | undefined | null>;
 
+/** Margem antes do vencimento em que o token já é considerado expirado. */
+const MARGEM_MS = 5 * 60_000;
+
+export const DICA_2FA =
+  "Se este usuário usa 2FA, faça o primeiro login com a ferramenta hubsoft_conectar " +
+  "(servidor + codigo_2fa do app autenticador) ou configure a semente em HUBSOFT_OTP_SECRET. " +
+  "Depois disso o token fica salvo e é renovado sozinho.";
+
 /**
  * Cliente mínimo da API do Hubsoft.
  *
- * - Autenticação OAuth2 "password grant" em POST /oauth/token
- * - Token em cache até expirar (a rota de auth aceita só 30 req/min por IP)
- * - Uma nova tentativa automática em caso de 401 (token revogado/expirado)
+ * Autenticação (OAuth2), na ordem:
+ *  1. token em memória ou salvo no arquivo de tokens, se ainda válido;
+ *  2. grant_type=refresh_token com o refresh salvo (uso único: o novo é gravado na hora);
+ *  3. grant_type=password, com `one_time_password` quando houver semente TOTP configurada.
+ * Usuário com 2FA sem semente: o primeiro login é feito por `conectar(codigo)`.
+ * A rota de auth aceita só 30 req/min por IP, por isso o token é reaproveitado ao máximo.
  */
 export class HubsoftClient {
   private token?: TokenState;
   private pendingAuth?: Promise<TokenState>;
+  private store: TokenStore;
+  private chave: string;
 
-  constructor(private cfg: HubsoftConfig) {}
+  constructor(private cfg: HubsoftConfig) {
+    this.store = new TokenStore(cfg.tokens ?? "");
+    this.chave = chaveToken(cfg.baseUrl, cfg.clientId, cfg.username);
+  }
 
   get config(): HubsoftConfig {
     return this.cfg;
   }
 
-  /** Faz a chamada de token em JSON ou form-urlencoded (o Hubsoft aceita ambos em versões diferentes). */
-  async requestToken(format: "json" | "form") {
-    const fields = {
+  /** POST /oauth/token em JSON ou form-urlencoded (o Hubsoft aceita ambos em versões diferentes). */
+  async requestToken(format: "json" | "form", extra: Record<string, string> = {}) {
+    const fields: Record<string, string> = {
       grant_type: "password",
       client_id: this.cfg.clientId,
       client_secret: this.cfg.clientSecret,
       username: this.cfg.username,
       password: this.cfg.password,
+      ...extra,
     };
+    if (fields.grant_type === "refresh_token") {
+      delete fields.username;
+      delete fields.password;
+    }
     const res = await fetch(`${this.cfg.baseUrl}/oauth/token`, {
       method: "POST",
       headers: {
@@ -57,26 +80,76 @@ export class HubsoftClient {
     return { res, body: await safeJson(res) };
   }
 
-  private async authenticate(): Promise<TokenState> {
-    let { res, body } = await this.requestToken("json");
-    if (!res.ok || !body?.access_token) {
-      const alt = await this.requestToken("form");
-      if (alt.res.ok && alt.body?.access_token) ({ res, body } = alt);
+  private async pedirToken(extra: Record<string, string>) {
+    let r = await this.requestToken("json", extra);
+    // tenta form-urlencoded só se o JSON não foi entendido; 401/429 não mudam com o formato
+    if (!r.body?.access_token && ![401, 429].includes(r.res.status)) {
+      const alt = await this.requestToken("form", extra);
+      if (alt.body?.access_token) r = alt;
     }
-    if (!res.ok || !body?.access_token) {
-      throw new HubsoftError(
-        `Falha na autenticação no Hubsoft (HTTP ${res.status}). ` +
-          `Confira URL, client_id, client_secret, usuário e senha.`,
-        res.status,
-        body,
-      );
-    }
+    return r;
+  }
+
+  /** Grava o token recebido (memória + arquivo) e devolve o estado. */
+  private guardar(body: any): TokenState {
     const ttlSec = Number(body.expires_in ?? 3600);
-    return {
-      header: `${body.token_type ?? "Bearer"} ${body.access_token}`,
-      // renova 60 s antes de expirar
-      expiresAt: Date.now() + Math.max(ttlSec - 60, 30) * 1000,
+    const tipo = body.token_type ?? "Bearer";
+    const anterior = this.store.get(this.chave);
+    const salvo: TokenSalvo = {
+      token_type: tipo,
+      access_token: body.access_token,
+      expires_at: Date.now() + ttlSec * 1000,
+      refresh_token: body.refresh_token ?? anterior?.refresh_token,
+      refresh_emitido_em: body.refresh_token ? new Date().toISOString() : anterior?.refresh_emitido_em,
+      atualizado_em: new Date().toISOString(),
     };
+    try {
+      this.store.set(this.chave, salvo);
+    } catch {
+      /* sem permissão de escrita: segue só em memória */
+    }
+    return this.estado(salvo);
+  }
+
+  private estado(t: TokenSalvo): TokenState {
+    return { header: `${t.token_type} ${t.access_token}`, expiresAt: t.expires_at - MARGEM_MS, access: t.access_token };
+  }
+
+  private falha(res: Response, body: any, comOtp: boolean): HubsoftError {
+    const msg = body?.msg || body?.message || body?.error_description || body?.error || "";
+    const dica = res.status === 429 ? " Limite de autenticação atingido (30/min); aguarde." : comOtp ? " O código 2FA gerado pela semente foi recusado: confira HUBSOFT_OTP_SECRET e o relógio do computador." : ` ${DICA_2FA}`;
+    return new HubsoftError(
+      `Falha na autenticação no Hubsoft (HTTP ${res.status}${msg ? `: ${msg}` : ""}). ` +
+        `Confira URL, client_id, client_secret, usuário e senha.` + dica,
+      res.status,
+      body,
+    );
+  }
+
+  private async authenticate(force: boolean): Promise<TokenState> {
+    const salvo = this.store.get(this.chave);
+    // 1) token salvo válido — inclusive se outro processo (CLI, outra janela) já renovou
+    if (salvo?.access_token && Date.now() < salvo.expires_at - MARGEM_MS) {
+      if (!force || salvo.access_token !== this.token?.access) return this.estado(salvo);
+    }
+    // 2) refresh_token (uso único)
+    if (salvo?.refresh_token) {
+      const r = await this.pedirToken({ grant_type: "refresh_token", refresh_token: salvo.refresh_token });
+      if (r.body?.access_token) return this.guardar(r.body);
+      if (r.res.status === 429) throw this.falha(r.res, r.body, false);
+      // refresh inválido/expirado: descarta e cai para o login com senha
+      try {
+        this.store.set(this.chave, undefined);
+      } catch {
+        /* ignore */
+      }
+    }
+    // 3) senha (+ TOTP automático, se houver semente)
+    const extra: Record<string, string> = {};
+    if (this.cfg.otpSecret) extra.one_time_password = totp(this.cfg.otpSecret);
+    const r = await this.pedirToken(extra);
+    if (r.body?.access_token) return this.guardar(r.body);
+    throw this.falha(r.res, r.body, !!this.cfg.otpSecret);
   }
 
   private async getToken(force = false): Promise<string> {
@@ -84,11 +157,58 @@ export class HubsoftClient {
       return this.token.header;
     }
     // evita autenticações paralelas
-    this.pendingAuth ??= this.authenticate().finally(() => {
+    this.pendingAuth ??= this.authenticate(force).finally(() => {
       this.pendingAuth = undefined;
     });
     this.token = await this.pendingAuth;
     return this.token.header;
+  }
+
+  /**
+   * Primeiro login de um usuário com 2FA: senha + código do app autenticador.
+   * O token e o refresh_token ficam salvos; os próximos logins não pedem código.
+   */
+  async conectar(codigo?: string): Promise<{ ok: true; metodo: string } & ReturnType<HubsoftClient["situacaoToken"]>> {
+    let metodo: string;
+    if (codigo) {
+      const r = await this.pedirToken({ one_time_password: codigo });
+      if (!r.body?.access_token) {
+        const msg = r.body?.msg || r.body?.message || r.body?.error_description || r.body?.error || "";
+        throw new HubsoftError(
+          `Login com 2FA recusado (HTTP ${r.res.status}${msg ? `: ${msg}` : ""}). ` +
+            "Confira usuário, senha e o código (ele muda a cada 30 s; use um código novo).",
+          r.res.status,
+          r.body,
+        );
+      }
+      this.token = this.guardar(r.body);
+      metodo = "senha + código 2FA";
+    } else {
+      this.token = undefined;
+      await this.getToken(false);
+      metodo = this.cfg.otpSecret ? "token salvo, refresh ou semente 2FA" : "token salvo, refresh ou senha";
+    }
+    return { ok: true, metodo, ...this.situacaoToken() };
+  }
+
+  /** Estado da autenticação, sem expor tokens. */
+  situacaoToken() {
+    const t = this.store.get(this.chave);
+    const exp = t?.expires_at ?? (this.token ? this.token.expiresAt + MARGEM_MS : undefined);
+    return {
+      token_valido_ate: exp ? new Date(exp).toISOString() : null,
+      token_valido: !!exp && Date.now() < exp - MARGEM_MS,
+      refresh_token_salvo: !!t?.refresh_token,
+      refresh_emitido_em: t?.refresh_emitido_em ?? null,
+      codigo_2fa_automatico: !!this.cfg.otpSecret,
+      arquivo_tokens: this.cfg.tokens || "desativado (só memória)",
+    };
+  }
+
+  /** Testa o acesso pelo fluxo normal (reaproveita o token; não gasta o refresh à toa). */
+  async testarLogin() {
+    await this.getToken(false);
+    return this.situacaoToken();
   }
 
   async request(
