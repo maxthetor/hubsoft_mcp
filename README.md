@@ -258,6 +258,9 @@ node scripts/hubsoft.mjs graphql --query '{ pops(first: 10) { data { id_pop } } 
 | `hubsoft_graphql` | Relatórios por período, POPs, CPEs, NFS-e, sessões RADIUS… |
 | `hubsoft_conectar` | Login com 2FA manual (normalmente não é preciso: uma página no navegador pede o código sozinha) |
 | `hubsoft_cpe_iniciar_gerenciamento` | Parâmetros gerenciáveis da CPE via ACS (Wi-Fi etc.), senhas mascaradas |
+| `hubsoft_exportar_servicos` 📄 | **CSV** com todos os serviços não cancelados da base: cliente, plano, status, login, MAC/`phy_addr`, OLT/PON, BNG e CPEs |
+| `hubsoft_exportar_cpes` 📄 | **CSV** do inventário de CPEs/ONUs (uma linha por CPE × serviço; CPE sem serviço = linha com serviço vazio) |
+| `hubsoft_exportar_equipamentos` 📄 | **CSV** de equipamentos (uma linha por interface: chassi/slot/PON, VLAN, roteamento) e **CSV** de POPs |
 | `hubsoft_desbloqueio_confianca` ✏️ | Desbloqueio em confiança |
 | `hubsoft_enviar_fatura_email` ✏️ | Envia fatura por e-mail |
 | `hubsoft_configurar_autenticacao` ✏️ | `phy_addr`, interface (PON), login, senha e observações da autenticação |
@@ -269,9 +272,38 @@ node scripts/hubsoft.mjs graphql --query '{ pops(first: 10) { data { id_pop } } 
 
 Com 2 ou mais bases, todas as ferramentas aceitam o parâmetro `servidor` (padrão: todas).
 
+📄 = exportação para CSV (só leitura no Hubsoft; grava um arquivo local). Detalhes em [Exportações (CSV)](#exportações-csv).
+
 ✏️ = escrita/controle, **desligada por padrão**. ⚠️ = destrutiva. Detalhes em [Escrita e controle de CPE](#escrita-e-controle-de-cpe). Todas as ferramentas têm `title` e `readOnlyHint`/`destructiveHint`/`idempotentHint`.
 
 **Atualizações do Hubsoft:** as ferramentas GraphQL leem o esquema **ao vivo**. Consultas novas que o Hubsoft lançar ficam disponíveis na hora, sem atualizar este projeto.
+
+## Exportações (CSV)
+
+As ferramentas 📄 geram planilhas da base inteira sem passar os dados pela conversa com a IA:
+
+1. **Só leitura no Hubsoft.** Fazem apenas `GET`: `cliente/todos` (100 por página, `cancelado=nao`, com as relações `interface`, `equipamento_conexao`, `interface_roteamento`, `equipamento_roteamento` e `cpes`), `rede/cpe/todos` (500 por página, `somente_assinante_associado=nao`), `rede/equipamento` e `rede/pop`.
+2. **Uma base por vez.** `servidor` é obrigatório e precisa ser o nome exato de uma base (ex.: `base_pf` ou `base_pj`). `"todos"`, listas e vazio são recusados.
+3. **Arquivo novo a cada execução.** CSV em UTF-8 com BOM e separador `;` (abre direto no Excel), na pasta `HUBSOFT_EXPORT_DIR`. O nome traz tipo, base e data/hora (`servicos_base_pf_2026-11-20_09-30-12.csv`); nada é sobrescrito. A de equipamentos gera dois arquivos (`equipamentos_…` e `pops_…`).
+4. **Só o resumo volta para a IA:** `arquivo`, `linhas`, `paginas_lidas`, `tempo_s`, `erros` e `completo`. Nenhuma linha de dados.
+5. **Paginação automática e limite de requisições.** Até `HUBSOFT_EXPORT_PARALELO` páginas ao mesmo tempo, sem passar de `HUBSOFT_EXPORT_REQ_S` (padrão 20 req/s, com 10% de folga). Num HTTP 429, a exportação espera o `retry_after` e continua.
+6. **Retomada.** Falha de rede, HTTP 5xx ou 408: até 3 tentativas na mesma página, sem reler as anteriores. Se a página não vier, o CSV sai com `_parcial` no nome e o resumo traz `retomar_de_pagina`; chame de novo com `pagina_inicial` igual a esse valor para buscar o restante num arquivo novo.
+7. **LGPD.** As colunas são uma lista fechada: **não** exportam CPF/CNPJ, RG, telefones, e-mails, endereços nem senhas (o `cpf_cnpj` que vem em `rede/cpe/todos` é descartado). Nos POPs, os campos extras que vierem passam pelo mesmo filtro.
+8. **Exportações longas.** Quando o cliente MCP pede, a ferramenta envia notificações de progresso (`notifications/progress`) a cada lote de páginas.
+
+| Ferramenta | Colunas |
+|---|---|
+| `hubsoft_exportar_servicos` | `base`, `id_cliente`, `codigo_cliente`, `nome_razaosocial`, `tipo_pessoa`, `id_cliente_servico`, `numero_plano`, `plano`, `tecnologia`, `status`, `status_prefixo`, `login`, `mac_addr`, `phy_addr`, `interface_nome`, `interface_tipo`, `equipamento_conexao_nome`, `equipamento_conexao_ip`, `interface_roteamento_nome`, `equipamento_roteamento_nome`, `equipamento_roteamento_ip`, `cpes_ids`, `cpes_phy_addr` (separados por `\|`), `qtd_cpes` |
+| `hubsoft_exportar_cpes` | `id_cpe`, `phy_addr`, `data_ultima_atualizacao`, `id_cliente_servico`, `login`, `status_servico`, `cliente` (texto como vem, incluindo "(INATIVO)") |
+| `hubsoft_exportar_equipamentos` | `id_equipamento`, `nome`, `ipv4`, `tipo`, `modelo`, `fabricante`, `autentica_radius`, `id_interface_conexao`, `interface_nome`, `interface_tipo`, `chassi`, `slot`, `pon`, `vlan` (da PON ou a `tag` da interface VLAN), `max_clientes`, `roteamento_interface_nome`, `roteamento_equipamento_nome`, `roteamento_equipamento_ip` |
+| (POPs) | `id_pop`, `nome`, demais campos simples que vierem, `qtd_equipamentos`, `equipamentos_ids`, `equipamentos_nomes` |
+
+Clientes sem serviço não geram linha na exportação de serviços. Se a API informar mais registros do que os lidos (paginação instável), o resumo traz um `aviso`.
+
+```
+hubsoft_exportar_cpes { servidor: "base_pf" }
+→ { "arquivo": ".../cpes_base_pf_2026-11-20_09-41-03.csv", "linhas": 41210, "paginas_lidas": 83, "tempo_s": 61.4, "erros": [], "completo": true }
+```
 
 ## Escrita e controle de CPE
 
@@ -322,6 +354,9 @@ Na simulação, `hubsoft_desvincular_cpe` mostra o rollback pronto: `configurar_
 | `HUBSOFT_GRAPHQL_PATH` | `/graphql/v1` | `off` desativa o GraphQL |
 | `HUBSOFT_EXPOR_SENHAS` | `false` | `true` mostra senhas (ex.: PPPoE) nas respostas |
 | `HUBSOFT_MAX_RESPONSE_CHARS` | `60000` | Limite de tamanho das respostas |
+| `HUBSOFT_EXPORT_DIR` | `~/hubsoft-exportacoes` | Pasta onde as ferramentas 📄 gravam os CSV |
+| `HUBSOFT_EXPORT_REQ_S` | `20` | Limite de requisições por segundo por base nas exportações |
+| `HUBSOFT_EXPORT_PARALELO` | `4` | Páginas buscadas ao mesmo tempo nas exportações (máx. 10) |
 | `HUBSOFT_2_*` … `HUBSOFT_9_*` | — | Bases adicionais (mesmos sufixos: `NOME`, `DESCRICAO`, `URL`, `CLIENT_ID`, `CLIENT_SECRET`, `USERNAME`, `PASSWORD`, `OTP_SECRET`, `GRAPHQL_PATH`, `PERMITIR_ESCRITA`) |
 | `HUBSOFT_CONFIG` | `~/.config/hubsoft/servidores.json` | Arquivo com a lista de bases |
 | `HUBSOFT_SERVIDOR` | primeira | Base usada por `npm run probe` e `npm run schema` |

@@ -22,6 +22,9 @@ O administrador do provedor cria no Hubsoft:
 | `HUBSOFT_TOKENS` | não | Arquivo dos tokens salvos (padrão `~/.config/hubsoft/tokens.json`; `off` = só memória) |
 | `HUBSOFT_PERMITIR_ESCRITA` | não | `true` habilita as ferramentas de escrita/CPE (padrão: desligado). Por base: `HUBSOFT_2_PERMITIR_ESCRITA` ou `"permitir_escrita": true` no servidores.json |
 | `HUBSOFT_AUDITORIA` | não | Log JSONL das escritas (padrão `~/.config/hubsoft/auditoria.jsonl`; `off` desativa) |
+| `HUBSOFT_EXPORT_DIR` | não | Pasta dos CSV das ferramentas `exportar_*` (padrão `~/hubsoft-exportacoes`) |
+| `HUBSOFT_EXPORT_REQ_S` | não | Limite de requisições por segundo por base nas exportações (padrão `20`, usado com 10% de folga) |
+| `HUBSOFT_EXPORT_PARALELO` | não | Páginas buscadas ao mesmo tempo nas exportações (padrão `4`, máx. `10`) |
 | `HUBSOFT_GRAPHQL_PATH` | não | Padrão `/graphql/v1`; `off` desativa |
 | `HUBSOFT_EXPOR_SENHAS` | não | `true` mostra senhas PPPoE (padrão: mascaradas) |
 

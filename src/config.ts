@@ -41,6 +41,8 @@ export interface HubsoftConfig {
   maxResponseChars: number;
   /** Mostrar senhas (PPPoE etc.) nas respostas. Padrão: false. */
   exposeSecrets: boolean;
+  /** Pasta onde as ferramentas de exportação gravam os CSV. */
+  exportDir: string;
 }
 
 /** Quantidade de servidores configuráveis por variáveis numeradas (HUBSOFT_2_*, …). */
@@ -112,6 +114,14 @@ function simNao(v: string | undefined): boolean | undefined {
 
 export const AUDITORIA_PADRAO = join(homedir(), ".config", "hubsoft", "auditoria.jsonl");
 
+/** Pasta padrão das exportações CSV. */
+export const EXPORT_PADRAO = join(homedir(), "hubsoft-exportacoes");
+
+function pasta(v: string | undefined, padrao: string) {
+  if (!v) return padrao;
+  return v === "~" ? homedir() : v.replace(/^~(?=[\\/])/, homedir());
+}
+
 function globais() {
   const aud = env("HUBSOFT_AUDITORIA");
   const tok = env("HUBSOFT_TOKENS");
@@ -121,6 +131,7 @@ function globais() {
     auditoria: aud === undefined ? AUDITORIA_PADRAO : aud.toLowerCase() === "off" ? "" : aud,
     maxResponseChars: Number(env("HUBSOFT_MAX_RESPONSE_CHARS") ?? 60000),
     exposeSecrets: bool("HUBSOFT_EXPOR_SENHAS", false),
+    exportDir: pasta(env("HUBSOFT_EXPORT_DIR"), EXPORT_PADRAO),
   };
 }
 

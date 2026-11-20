@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "hubsoft-mcp",
   "display_name": "Hubsoft (não oficial)",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Consulte uma ou várias bases do ERP Hubsoft (clientes, bloqueados, faturas, RADIUS) com as permissões do seu próprio usuário.",
   "long_description": "Servidor MCP não oficial para o Hubsoft, ERP de provedores de internet. Cada pessoa usa o próprio login do Hubsoft; as credenciais ficam só no computador dela. Modo somente leitura por padrão.",
   "author": {
@@ -54,7 +54,8 @@
         "HUBSOFT_OTP_SECRET": "${user_config.otp_secret}",
         "HUBSOFT_2_OTP_SECRET": "${user_config.otp_secret_2}",
         "HUBSOFT_3_OTP_SECRET": "${user_config.otp_secret_3}",
-        "HUBSOFT_2FA_COMANDO": "${user_config.comando_2fa}"
+        "HUBSOFT_2FA_COMANDO": "${user_config.comando_2fa}",
+        "HUBSOFT_EXPORT_DIR": "${user_config.pasta_exportacao}"
       }
     }
   },
@@ -150,6 +151,18 @@
     {
       "name": "hubsoft_cpe_gerenciar",
       "description": "ESCRITA: altera parâmetros da CPE via ACS (Wi-Fi etc.)"
+    },
+    {
+      "name": "hubsoft_exportar_servicos",
+      "description": "Exporta os serviços de uma base para CSV (uma linha por serviço, sem dados pessoais sensíveis)"
+    },
+    {
+      "name": "hubsoft_exportar_cpes",
+      "description": "Exporta o inventário de CPEs/ONUs de uma base para CSV (CPE × serviço)"
+    },
+    {
+      "name": "hubsoft_exportar_equipamentos",
+      "description": "Exporta equipamentos (uma linha por interface) e POPs de uma base para CSV"
     }
   ],
   "user_config": {
@@ -339,6 +352,13 @@
       "type": "string",
       "title": "Arquivo de auditoria (opcional)",
       "description": "JSONL das escritas executadas. Padrão: ~/.config/hubsoft/auditoria.jsonl; off desativa",
+      "default": "",
+      "required": false
+    },
+    "pasta_exportacao": {
+      "type": "string",
+      "title": "Pasta das exportações CSV (opcional)",
+      "description": "Onde as ferramentas hubsoft_exportar_* gravam os CSV. Padrão: ~/hubsoft-exportacoes",
       "default": "",
       "required": false
     },

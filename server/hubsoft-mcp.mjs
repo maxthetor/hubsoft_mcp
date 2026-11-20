@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// hubsoft-mcp 0.10.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
+// hubsoft-mcp 0.11.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
 // Arquivo gerado por scripts/bundle.mjs a partir de src/. Não edite.
 import { createRequire as __cr } from "node:module"; const require = __cr(import.meta.url);
 var __create = Object.create;
@@ -36780,6 +36780,11 @@ function simNao(v) {
   return ["1", "true", "sim", "yes", "on"].includes(v.trim().toLowerCase());
 }
 var AUDITORIA_PADRAO = join2(homedir2(), ".config", "hubsoft", "auditoria.jsonl");
+var EXPORT_PADRAO = join2(homedir2(), "hubsoft-exportacoes");
+function pasta(v, padrao) {
+  if (!v) return padrao;
+  return v === "~" ? homedir2() : v.replace(/^~(?=[\\/])/, homedir2());
+}
 function globais() {
   const aud = env("HUBSOFT_AUDITORIA");
   const tok = env("HUBSOFT_TOKENS");
@@ -36788,7 +36793,8 @@ function globais() {
     readOnly: !escritaGlobal(),
     auditoria: aud === void 0 ? AUDITORIA_PADRAO : aud.toLowerCase() === "off" ? "" : aud,
     maxResponseChars: Number(env("HUBSOFT_MAX_RESPONSE_CHARS") ?? 6e4),
-    exposeSecrets: bool("HUBSOFT_EXPOR_SENHAS", false)
+    exposeSecrets: bool("HUBSOFT_EXPOR_SENHAS", false),
+    exportDir: pasta(env("HUBSOFT_EXPORT_DIR"), EXPORT_PADRAO)
   };
 }
 function lerArquivo(caminho) {
@@ -38979,6 +38985,455 @@ function registerGraphql(server, hs) {
   );
 }
 
+// src/exportar.ts
+import { mkdirSync as mkdirSync3, writeFileSync as writeFileSync2 } from "node:fs";
+import { join as join3 } from "node:path";
+var num = (nome, padrao) => {
+  const v = Number(process.env[nome]);
+  return Number.isFinite(v) && v > 0 ? v : padrao;
+};
+var TENTATIVAS = 3;
+var MAX_429_POR_PAGINA = 10;
+var MAX_ESPERA_S = 120;
+var MAX_PAGINAS3 = 5e3;
+var limites = /* @__PURE__ */ new Map();
+var dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+async function vez(base) {
+  const intervalo = 1e3 / (num("HUBSOFT_EXPORT_REQ_S", 20) * 0.9);
+  const l = limites.get(base) ?? { proximo: 0, pausadoAte: 0 };
+  limites.set(base, l);
+  const agora = Date.now();
+  const quando = Math.max(agora, l.proximo, l.pausadoAte);
+  l.proximo = quando + intervalo;
+  if (quando > agora) await dormir(quando - agora);
+}
+function pausar(base, segundos2) {
+  const l = limites.get(base) ?? { proximo: 0, pausadoAte: 0 };
+  l.pausadoAte = Math.max(l.pausadoAte, Date.now() + Math.min(segundos2, MAX_ESPERA_S) * 1e3);
+  limites.set(base, l);
+}
+async function obter(hs, rota, query, cont) {
+  const base = hs.config.baseUrl;
+  const esperaMs = num("HUBSOFT_EXPORT_ESPERA_MS", 1e3);
+  let erro = "";
+  let esperas = 0;
+  for (let tentativa = 1; tentativa <= TENTATIVAS; ) {
+    await vez(base);
+    cont.requisicoes++;
+    let r;
+    try {
+      r = await hs.raw("GET", rota, { query });
+    } catch (e) {
+      if (e instanceof HubsoftError) throw e;
+      erro = `erro de rede: ${e?.cause?.code ?? e.message}`;
+      if (tentativa++ < TENTATIVAS) {
+        cont.novas_tentativas++;
+        await dormir(esperaMs * (tentativa - 1));
+      }
+      continue;
+    }
+    if (r.status === 429) {
+      cont.esperas_429++;
+      if (++esperas > MAX_429_POR_PAGINA) return { ok: false, erro: `HTTP 429 repetido ${esperas - 1} vezes` };
+      pausar(base, r.retryAfter ?? 1);
+      continue;
+    }
+    if (r.ok) return { ok: true, body: r.body };
+    const msg = r.body?.msg || r.body?.message || r.body?.error || "";
+    const detalhes = Array.isArray(r.body?.errors) ? ` ${r.body.errors.join(" ")}` : "";
+    erro = `HTTP ${r.status}${msg ? `: ${msg}` : ""}${detalhes}`;
+    if (r.status < 500 && r.status !== 408) return { ok: false, erro };
+    if (tentativa++ < TENTATIVAS) {
+      cont.novas_tentativas++;
+      await dormir(esperaMs * (tentativa - 1));
+    }
+  }
+  return { ok: false, erro: `${erro} (ap\xF3s ${TENTATIVAS} tentativas)` };
+}
+async function paginar(opts) {
+  const paralelo = Math.min(10, Math.floor(num("HUBSOFT_EXPORT_PARALELO", 4)));
+  const res = { paginas_lidas: 0, requisicoes: 0, esperas_429: 0, novas_tentativas: 0, erros: [] };
+  const inicio = Math.max(0, Math.floor(opts.paginaInicial ?? 0));
+  const ler2 = (p) => obter(opts.hs, opts.rota, { ...opts.query, pagina: p }, res);
+  const lista = (body) => Array.isArray(body?.[opts.chave]) ? body[opts.chave] : [];
+  const primeira = await ler2(inicio);
+  if (!primeira.ok) {
+    res.pagina_falhou = inicio;
+    res.erros.push(`p\xE1gina ${inicio}: ${primeira.erro}`);
+    return res;
+  }
+  const pg = primeira.body?.paginacao;
+  res.total_registros = pg?.total_registros === void 0 ? void 0 : Number(pg.total_registros);
+  const ultima = Math.min(Number(pg?.ultima_pagina ?? inicio), inicio + MAX_PAGINAS3 - 1);
+  res.ultima_pagina = Number(pg?.ultima_pagina ?? inicio);
+  opts.aoLer(lista(primeira.body));
+  res.paginas_lidas++;
+  const total = ultima - inicio + 1;
+  opts.progresso?.(res.paginas_lidas, total);
+  for (let p = inicio + 1; p <= ultima; p += paralelo) {
+    const nums = Array.from({ length: Math.min(paralelo, ultima - p + 1) }, (_, i) => p + i);
+    const lote = await Promise.all(nums.map(ler2));
+    for (let i = 0; i < lote.length; i++) {
+      const r = lote[i];
+      if (!r.ok) {
+        res.pagina_falhou = nums[i];
+        res.erros.push(`p\xE1gina ${nums[i]}: ${r.erro}`);
+        return res;
+      }
+      opts.aoLer(lista(r.body));
+      res.paginas_lidas++;
+    }
+    opts.progresso?.(res.paginas_lidas, total);
+  }
+  if (res.ultima_pagina > ultima) res.erros.push(`limite de seguran\xE7a de ${MAX_PAGINAS3} p\xE1ginas atingido`);
+  return res;
+}
+var CAMPO_PESSOAL = /cpf|cnpj|(^|_)rg(_|$)|telefone|celular|whatsapp|e_?mail|endereco|logradouro|bairro|(^|_)cep(_|$)|complemento|senha|password|secret|token|nascimento/i;
+function celula(v) {
+  if (v === null || v === void 0) return "";
+  const s = typeof v === "object" ? JSON.stringify(v) : String(v);
+  return /[;"\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+function gerarCsv(colunas, linhas) {
+  const out = [colunas.map(celula).join(";")];
+  for (const l of linhas) out.push(colunas.map((c) => celula(l[c])).join(";"));
+  return "\uFEFF" + out.join("\r\n") + "\r\n";
+}
+var dois = (n) => String(n).padStart(2, "0");
+function carimbo(d = /* @__PURE__ */ new Date()) {
+  return `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())}_${dois(d.getHours())}-${dois(d.getMinutes())}-${dois(d.getSeconds())}`;
+}
+function gravarCsv(dir, tipo, base, colunas, linhas, parcial = false) {
+  mkdirSync3(dir, { recursive: true });
+  const nome = `${tipo}_${base}_${carimbo()}${parcial ? "_parcial" : ""}`;
+  const dados = gerarCsv(colunas, linhas);
+  for (let n = 1; n < 1e3; n++) {
+    const arquivo = join3(dir, `${nome}${n > 1 ? `_${n}` : ""}.csv`);
+    try {
+      writeFileSync2(arquivo, dados, { encoding: "utf8", flag: "wx" });
+      return arquivo;
+    } catch (e) {
+      if (e.code !== "EEXIST") throw e;
+    }
+  }
+  throw new Error(`N\xE3o foi poss\xEDvel criar um arquivo novo para ${nome} em ${dir}.`);
+}
+var juntar = (v) => v.filter((x) => x !== null && x !== void 0 && x !== "").join("|");
+var segundos = (inicio) => Math.round((Date.now() - inicio) / 100) / 10;
+
+// src/tools/exportacao.ts
+var COLUNAS_SERVICOS = [
+  "base",
+  "id_cliente",
+  "codigo_cliente",
+  "nome_razaosocial",
+  "tipo_pessoa",
+  "id_cliente_servico",
+  "numero_plano",
+  "plano",
+  "tecnologia",
+  "status",
+  "status_prefixo",
+  "login",
+  "mac_addr",
+  "phy_addr",
+  "interface_nome",
+  "interface_tipo",
+  "equipamento_conexao_nome",
+  "equipamento_conexao_ip",
+  "interface_roteamento_nome",
+  "equipamento_roteamento_nome",
+  "equipamento_roteamento_ip",
+  "cpes_ids",
+  "cpes_phy_addr",
+  "qtd_cpes"
+];
+var COLUNAS_CPES = [
+  "id_cpe",
+  "phy_addr",
+  "data_ultima_atualizacao",
+  "id_cliente_servico",
+  "login",
+  "status_servico",
+  "cliente"
+];
+var COLUNAS_EQUIPAMENTOS = [
+  "id_equipamento",
+  "nome",
+  "ipv4",
+  "tipo",
+  "modelo",
+  "fabricante",
+  "autentica_radius",
+  "id_interface_conexao",
+  "interface_nome",
+  "interface_tipo",
+  "chassi",
+  "slot",
+  "pon",
+  "vlan",
+  "max_clientes",
+  "roteamento_interface_nome",
+  "roteamento_equipamento_nome",
+  "roteamento_equipamento_ip"
+];
+var RELACOES2 = "interface,equipamento_conexao,interface_roteamento,equipamento_roteamento,cpes";
+var pagInicial = external_exports.number().int().min(0).optional().describe("P\xE1gina inicial (a API come\xE7a em 0). Use s\xF3 para retomar uma exporta\xE7\xE3o que parou, com o valor de retomar_de_pagina.");
+function progresso(extra, rotulo2) {
+  const token = extra?._meta?.progressToken;
+  if (token === void 0 || typeof extra?.sendNotification !== "function") return void 0;
+  return (lidas, total) => {
+    extra.sendNotification({
+      method: "notifications/progress",
+      params: { progressToken: token, progress: lidas, ...total ? { total } : {}, message: `${rotulo2}: ${lidas}${total ? `/${total}` : ""} p\xE1ginas` }
+    }).catch(() => {
+    });
+  };
+}
+function resumo(arquivo, linhas, r, inicio, extra = {}) {
+  const completo = r.pagina_falhou === void 0 && !r.erros.length;
+  return {
+    arquivo,
+    linhas,
+    paginas_lidas: r.paginas_lidas,
+    tempo_s: segundos(inicio),
+    erros: r.erros,
+    completo,
+    ...r.pagina_falhou !== void 0 ? { retomar_de_pagina: r.pagina_falhou } : {},
+    ...r.esperas_429 ? { esperas_429: r.esperas_429 } : {},
+    ...r.novas_tentativas ? { novas_tentativas: r.novas_tentativas } : {},
+    ...extra
+  };
+}
+function linhasServicos(base, c) {
+  return (c?.servicos ?? []).map((s) => {
+    const cpes = Array.isArray(s?.cpes) ? s.cpes : [];
+    return {
+      base,
+      id_cliente: c.id_cliente,
+      codigo_cliente: c.codigo_cliente,
+      nome_razaosocial: c.nome_razaosocial,
+      tipo_pessoa: c.tipo_pessoa,
+      id_cliente_servico: s.id_cliente_servico,
+      numero_plano: s.numero_plano,
+      plano: s.nome,
+      tecnologia: s.tecnologia,
+      status: s.status,
+      status_prefixo: s.status_prefixo,
+      login: s.login,
+      mac_addr: s.mac_addr,
+      phy_addr: s.phy_addr,
+      interface_nome: s.interface?.nome,
+      interface_tipo: s.interface?.tipo,
+      equipamento_conexao_nome: s.equipamento_conexao?.nome,
+      equipamento_conexao_ip: s.equipamento_conexao?.ipv4,
+      interface_roteamento_nome: s.interface_roteamento?.nome,
+      equipamento_roteamento_nome: s.equipamento_roteamento?.nome,
+      equipamento_roteamento_ip: s.equipamento_roteamento?.ipv4,
+      cpes_ids: juntar(cpes.map((x) => x?.id_cpe)),
+      cpes_phy_addr: juntar(cpes.map((x) => x?.phy_addr)),
+      qtd_cpes: cpes.length
+    };
+  });
+}
+function linhasCpe(cpe) {
+  const base = { id_cpe: cpe?.id_cpe, phy_addr: cpe?.phy_addr, data_ultima_atualizacao: cpe?.data_ultima_atualizacao };
+  const servicos = Array.isArray(cpe?.servicos) ? cpe.servicos : [];
+  if (!servicos.length) return [base];
+  return servicos.map((s) => ({
+    ...base,
+    id_cliente_servico: s?.id_cliente_servico,
+    login: s?.login,
+    status_servico: s?.status,
+    cliente: s?.cliente
+  }));
+}
+function detalheInterface(i) {
+  const porTipo = i?.[`interface_${String(i?.tipo ?? "").toLowerCase()}`];
+  if (porTipo && typeof porTipo === "object") return porTipo;
+  const k = Object.keys(i ?? {}).find((x) => x.startsWith("interface_") && x !== "interface_conexao_roteamento" && i[x] && typeof i[x] === "object");
+  return k ? i[k] : {};
+}
+function linhasEquipamento(e) {
+  const base = {
+    id_equipamento: e?.id_equipamento,
+    nome: e?.nome,
+    ipv4: e?.ipv4,
+    tipo: e?.tipo,
+    modelo: e?.modelo,
+    fabricante: e?.fabricante,
+    autentica_radius: e?.autentica_radius
+  };
+  const ifs = Array.isArray(e?.interfaces) ? e.interfaces : [];
+  if (!ifs.length) return [base];
+  return ifs.map((i) => {
+    const d = detalheInterface(i);
+    const rot = i?.interface_conexao_roteamento;
+    return {
+      ...base,
+      id_interface_conexao: i?.id_interface_conexao,
+      interface_nome: i?.nome,
+      interface_tipo: i?.tipo,
+      chassi: d?.chassi,
+      slot: d?.slot,
+      pon: d?.pon,
+      vlan: d?.vlan ?? d?.tag,
+      max_clientes: d?.max_clientes,
+      roteamento_interface_nome: rot?.nome,
+      roteamento_equipamento_nome: rot?.equipamento_conexao?.nome,
+      roteamento_equipamento_ip: rot?.equipamento_conexao?.ipv4
+    };
+  });
+}
+function tabelaPops(pops) {
+  const colunas = ["id_pop", "nome"];
+  const linhas = pops.map((p) => {
+    const l = {};
+    for (const [k, v] of Object.entries(p ?? {})) {
+      if (CAMPO_PESSOAL.test(k) || v !== null && typeof v === "object") continue;
+      l[k] = v;
+      if (!colunas.includes(k)) colunas.push(k);
+    }
+    const eqs = Array.isArray(p?.equipamentos) ? p.equipamentos : [];
+    l.qtd_equipamentos = eqs.length;
+    l.equipamentos_ids = juntar(eqs.map((x) => x?.id_equipamento));
+    l.equipamentos_nomes = juntar(eqs.map((x) => x?.nome));
+    return l;
+  });
+  colunas.push("qtd_equipamentos", "equipamentos_ids", "equipamentos_nomes");
+  return { colunas, linhas };
+}
+function registerExportacao(server, hs) {
+  const max = hs.config.maxResponseChars;
+  const base = hs.config.nome;
+  const dir = () => hs.config.exportDir;
+  const anotacoes = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true };
+  const regra = " S\xF3 GET no Hubsoft; grava um CSV novo (UTF-8 com BOM, separador ';') em HUBSOFT_EXPORT_DIR e devolve apenas o resumo (arquivo, linhas, p\xE1ginas, tempo, erros), nunca os dados. Sem CPF/CNPJ, RG, telefones, e-mails, endere\xE7os nem senhas. Exige servidor com UMA base. Se parar no meio, o arquivo sai como _parcial e o resumo traz retomar_de_pagina.";
+  server.registerTool(
+    "hubsoft_exportar_servicos",
+    {
+      title: "Exportar servi\xE7os para CSV",
+      description: "Exporta para CSV todos os servi\xE7os de clientes n\xE3o cancelados da base (REST cliente/todos com as rela\xE7\xF5es de interface, equipamentos e CPEs), uma linha por servi\xE7o: cliente, plano, status, login, MAC/phy_addr, OLT/PON, BNG e CPEs vinculadas." + regra,
+      inputSchema: { pagina_inicial: pagInicial },
+      annotations: { title: "Exportar servi\xE7os para CSV", ...anotacoes }
+    },
+    async ({ pagina_inicial }, extra) => run(max, async () => {
+      const inicio = Date.now();
+      const linhas = [];
+      const servicos = /* @__PURE__ */ new Set();
+      const clientes = /* @__PURE__ */ new Set();
+      let duplicados = 0;
+      const r = await paginar({
+        hs,
+        rota: `${API}/cliente/todos`,
+        query: { itens_por_pagina: 100, cancelado: "nao", relacoes: RELACOES2 },
+        chave: "clientes",
+        paginaInicial: pagina_inicial,
+        progresso: progresso(extra, "servi\xE7os"),
+        aoLer: (lote) => {
+          for (const c of lote) {
+            clientes.add(String(c?.id_cliente ?? c?.codigo_cliente));
+            for (const l of linhasServicos(base, c)) {
+              const id = String(l.id_cliente_servico);
+              if (servicos.has(id)) duplicados++;
+              else {
+                servicos.add(id);
+                linhas.push(l);
+              }
+            }
+          }
+        }
+      });
+      const parcial = r.pagina_falhou !== void 0;
+      const arquivo = gravarCsv(dir(), "servicos", base, COLUNAS_SERVICOS, linhas, parcial);
+      const aviso = !parcial && !pagina_inicial && r.total_registros !== void 0 && clientes.size < r.total_registros ? `A API informou ${r.total_registros} clientes e foram lidos ${clientes.size} (a pagina\xE7\xE3o pode ter pulado registros).` : void 0;
+      return resumo(arquivo, linhas.length, r, inicio, {
+        ...duplicados ? { duplicados_descartados: duplicados } : {},
+        ...aviso ? { aviso } : {}
+      });
+    })
+  );
+  server.registerTool(
+    "hubsoft_exportar_cpes",
+    {
+      title: "Exportar CPEs para CSV",
+      description: "Exporta para CSV o invent\xE1rio de CPEs/ONUs da base (REST rede/cpe/todos, com e sem assinante), uma linha por par CPE \xD7 servi\xE7o (CPE sem servi\xE7o = 1 linha com o servi\xE7o vazio): id_cpe, phy_addr, \xFAltima atualiza\xE7\xE3o, servi\xE7o, login, status e o texto do cliente como vem (incluindo '(INATIVO)')." + regra,
+      inputSchema: { pagina_inicial: pagInicial },
+      annotations: { title: "Exportar CPEs para CSV", ...anotacoes }
+    },
+    async ({ pagina_inicial }, extra) => run(max, async () => {
+      const inicio = Date.now();
+      const linhas = [];
+      const vistos = /* @__PURE__ */ new Set();
+      let duplicados = 0;
+      const r = await paginar({
+        hs,
+        rota: `${API}/rede/cpe/todos`,
+        query: { itens_por_pagina: 500, somente_assinante_associado: "nao" },
+        chave: "cpes",
+        paginaInicial: pagina_inicial,
+        progresso: progresso(extra, "CPEs"),
+        aoLer: (lote) => {
+          for (const c of lote) {
+            const id = String(c?.id_cpe);
+            if (vistos.has(id)) {
+              duplicados++;
+              continue;
+            }
+            vistos.add(id);
+            linhas.push(...linhasCpe(c));
+          }
+        }
+      });
+      const parcial = r.pagina_falhou !== void 0;
+      const arquivo = gravarCsv(dir(), "cpes", base, COLUNAS_CPES, linhas, parcial);
+      const aviso = !parcial && !pagina_inicial && r.total_registros !== void 0 && vistos.size < r.total_registros ? `A API informou ${r.total_registros} CPEs e foram lidas ${vistos.size} (a pagina\xE7\xE3o pode ter pulado registros).` : void 0;
+      return resumo(arquivo, linhas.length, r, inicio, {
+        ...duplicados ? { duplicados_descartados: duplicados } : {},
+        ...aviso ? { aviso } : {}
+      });
+    })
+  );
+  server.registerTool(
+    "hubsoft_exportar_equipamentos",
+    {
+      title: "Exportar equipamentos e POPs para CSV",
+      description: "Exporta para CSV os equipamentos de rede da base (REST rede/equipamento), uma linha por interface (OLT/PON com chassi/slot/pon, VLAN, roteamento/BNG; equipamento sem interface = 1 linha), e os POPs (REST rede/pop) num segundo CSV." + regra,
+      inputSchema: {},
+      annotations: { title: "Exportar equipamentos e POPs para CSV", ...anotacoes }
+    },
+    async () => run(max, async () => {
+      const inicio = Date.now();
+      const cont = { requisicoes: 0, esperas_429: 0, novas_tentativas: 0 };
+      const erros = [];
+      const arquivos = {};
+      let paginas = 0;
+      const eq = await obter(hs, `${API}/rede/equipamento`, {}, cont);
+      if (eq.ok) {
+        paginas++;
+        const linhas = (Array.isArray(eq.body?.equipamentos) ? eq.body.equipamentos : []).flatMap(linhasEquipamento);
+        arquivos.equipamentos = { arquivo: gravarCsv(dir(), "equipamentos", base, COLUNAS_EQUIPAMENTOS, linhas), linhas: linhas.length };
+      } else erros.push(`rede/equipamento: ${eq.erro}`);
+      const pop = await obter(hs, `${API}/rede/pop`, {}, cont);
+      if (pop.ok) {
+        paginas++;
+        const t = tabelaPops(Array.isArray(pop.body?.pops) ? pop.body.pops : []);
+        arquivos.pops = { arquivo: gravarCsv(dir(), "pops", base, t.colunas, t.linhas), linhas: t.linhas.length };
+      } else erros.push(`rede/pop: ${pop.erro}`);
+      if (!paginas) throw new Error(`Nada foi exportado. ${erros.join(" | ")}`);
+      return {
+        arquivos,
+        paginas_lidas: paginas,
+        tempo_s: segundos(inicio),
+        erros,
+        completo: !erros.length,
+        ...cont.esperas_429 ? { esperas_429: cont.esperas_429 } : {},
+        ...cont.novas_tentativas ? { novas_tentativas: cont.novas_tentativas } : {}
+      };
+    })
+  );
+}
+
 // src/registry.ts
 function collectTools(hs) {
   const defs = [];
@@ -38996,11 +39451,12 @@ function collectTools(hs) {
   if (!hs.config.readOnly) registerEscrita(collector, hs);
   registerCpe(collector, hs);
   registerGraphql(collector, hs);
+  registerExportacao(collector, hs);
   return defs;
 }
 
 // src/version.ts
-var VERSION = "0.10.0";
+var VERSION = "0.11.0";
 
 // src/multi.ts
 function diagnosticoVariaveis() {
@@ -39013,7 +39469,13 @@ function diagnosticoVariaveis() {
   return out;
 }
 var TODOS = /* @__PURE__ */ new Set(["", "todos", "todas", "all", "*"]);
-var UMA_BASE_LEITURA = /* @__PURE__ */ new Set(["hubsoft_cpe_iniciar_gerenciamento", "hubsoft_conectar"]);
+var UMA_BASE_LEITURA = /* @__PURE__ */ new Set([
+  "hubsoft_cpe_iniciar_gerenciamento",
+  "hubsoft_conectar",
+  "hubsoft_exportar_servicos",
+  "hubsoft_exportar_cpes",
+  "hubsoft_exportar_equipamentos"
+]);
 function exigeUmServidor(t) {
   return t.config.annotations?.readOnlyHint === false && t.name !== "hubsoft_graphql" || UMA_BASE_LEITURA.has(t.name);
 }
@@ -39150,11 +39612,11 @@ function collectMultiTools(servers) {
               ...t.config.inputSchema ?? {}
             }
           },
-          cb: async (args) => {
+          cb: async (args, extra) => {
             try {
               const { servidor: servidor2, ...resto } = args ?? {};
               resolverUmaBase(servers, servidor2);
-              return comServidor(unico.nome, await t.cb(resto), max);
+              return comServidor(unico.nome, await t.cb(resto, extra), max);
             } catch (e) {
               return fail(e);
             }
@@ -39183,7 +39645,7 @@ function collectMultiTools(servers) {
         description: `${base.config.description ?? ""} ` + (umSo ? "Exige o par\xE2metro servidor (uma \xFAnica base)." : "Sem o par\xE2metro servidor, consulta todas as bases e agrupa o resultado por base."),
         inputSchema: { servidor: servidorParam, ...base.config.inputSchema ?? {} }
       },
-      cb: async (args) => {
+      cb: async (args, extra) => {
         try {
           const { servidor: servidor2, ...resto } = args ?? {};
           if (umSo) {
@@ -39194,7 +39656,7 @@ function collectMultiTools(servers) {
                 `[${alvo.nome}] ferramenta indispon\xEDvel nesta base` + (base.config.annotations?.readOnlyHint === false ? " (escrita n\xE3o habilitada: HUBSOFT_PERMITIR_ESCRITA)." : ".")
               );
             }
-            return comServidor(alvo.nome, await def.cb(resto), max);
+            return comServidor(alvo.nome, await def.cb(resto, extra), max);
           }
           const alvos = resolverServidores(servers, servidor2);
           const resultados = await Promise.all(
@@ -39241,7 +39703,7 @@ function collectMultiTools(servers) {
 }
 
 // src/index.ts
-var INSTRUCTIONS = "Ferramentas para o ERP Hubsoft (provedores de internet). As chamadas usam o login do pr\xF3prio usu\xE1rio, ent\xE3o o acesso segue as permiss\xF5es dele no Hubsoft. Para perguntas sobre um cliente, comece por hubsoft_situacao_cliente (CPF/CNPJ ou c\xF3digo). Para listas de clientes bloqueados/suspensos ou por qualquer status de servi\xE7o, use hubsoft_servicos_por_status (filtra no servidor; n\xE3o varra a base). Para totais de um per\xEDodo (faturamento, recebimentos, inadimpl\xEAncia por m\xEAs), use hubsoft_resumo_financeiro, que pagina e soma no servidor; nunca pagine faturas para somar. Para clientes com cadastro ativo e sem servi\xE7o ativo, use hubsoft_clientes_ativos_sem_servico_ativo (varre a base no servidor); nunca pagine clientes manualmente. Para buscas por nome, login ou outros campos use hubsoft_buscar_cliente. Para relat\xF3rios por per\xEDodo, POPs, CPEs/ONUs, notas fiscais e sess\xF5es RADIUS, use as ferramentas GraphQL (hubsoft_graphql_consultas \u2192 hubsoft_graphql_tipo \u2192 hubsoft_graphql). Faturas com status 'aguardando' e vencimento futuro (ex.: parcelas de carn\xEA) n\xE3o est\xE3o vencidas. Senhas (ex.: PPPoE) s\xE3o mascaradas por padr\xE3o. Dados de clientes s\xE3o pessoais (LGPD): mostre apenas o necess\xE1rio. Quando o login exige 2FA, o pr\xF3prio MCP abre uma p\xE1gina no navegador para o usu\xE1rio digitar o c\xF3digo. Se a resposta disser 'Login 2FA pendente', mostre o link ao usu\xE1rio e repita a consulta depois que ele conectar. S\xF3 se isso n\xE3o for poss\xEDvel, pe\xE7a o c\xF3digo e chame hubsoft_conectar; nunca invente um c\xF3digo. O token fica salvo, ent\xE3o isso s\xF3 \xE9 preciso no primeiro acesso. Antes de qualquer a\xE7\xE3o que altere dados, confirme cliente e servi\xE7o com o usu\xE1rio. Ferramentas de escrita/controle de CPE (configurar_autenticacao, vincular/desvincular_cpe, reiniciar/restaurar_cpe, cpe_gerenciar) exigem servidor com UMA base e come\xE7am SEMPRE em simula\xE7\xE3o (confirmar=false): mostre ao usu\xE1rio o estado atual, a requisi\xE7\xE3o e o efeito, e s\xF3 repita com confirmar=true depois de ele aprovar explicitamente. Depois de executar, mostre o diff antes/depois.";
+var INSTRUCTIONS = "Ferramentas para o ERP Hubsoft (provedores de internet). As chamadas usam o login do pr\xF3prio usu\xE1rio, ent\xE3o o acesso segue as permiss\xF5es dele no Hubsoft. Para perguntas sobre um cliente, comece por hubsoft_situacao_cliente (CPF/CNPJ ou c\xF3digo). Para listas de clientes bloqueados/suspensos ou por qualquer status de servi\xE7o, use hubsoft_servicos_por_status (filtra no servidor; n\xE3o varra a base). Para totais de um per\xEDodo (faturamento, recebimentos, inadimpl\xEAncia por m\xEAs), use hubsoft_resumo_financeiro, que pagina e soma no servidor; nunca pagine faturas para somar. Para clientes com cadastro ativo e sem servi\xE7o ativo, use hubsoft_clientes_ativos_sem_servico_ativo (varre a base no servidor); nunca pagine clientes manualmente. Para buscas por nome, login ou outros campos use hubsoft_buscar_cliente. Para relat\xF3rios por per\xEDodo, POPs, CPEs/ONUs, notas fiscais e sess\xF5es RADIUS, use as ferramentas GraphQL (hubsoft_graphql_consultas \u2192 hubsoft_graphql_tipo \u2192 hubsoft_graphql). Faturas com status 'aguardando' e vencimento futuro (ex.: parcelas de carn\xEA) n\xE3o est\xE3o vencidas. Para exportar a base inteira (servi\xE7os, CPEs, equipamentos/POPs) para planilha, use hubsoft_exportar_* com servidor de UMA base: elas gravam um CSV e devolvem s\xF3 o resumo; n\xE3o pagine para montar planilhas. Senhas (ex.: PPPoE) s\xE3o mascaradas por padr\xE3o. Dados de clientes s\xE3o pessoais (LGPD): mostre apenas o necess\xE1rio. Quando o login exige 2FA, o pr\xF3prio MCP abre uma p\xE1gina no navegador para o usu\xE1rio digitar o c\xF3digo. Se a resposta disser 'Login 2FA pendente', mostre o link ao usu\xE1rio e repita a consulta depois que ele conectar. S\xF3 se isso n\xE3o for poss\xEDvel, pe\xE7a o c\xF3digo e chame hubsoft_conectar; nunca invente um c\xF3digo. O token fica salvo, ent\xE3o isso s\xF3 \xE9 preciso no primeiro acesso. Antes de qualquer a\xE7\xE3o que altere dados, confirme cliente e servi\xE7o com o usu\xE1rio. Ferramentas de escrita/controle de CPE (configurar_autenticacao, vincular/desvincular_cpe, reiniciar/restaurar_cpe, cpe_gerenciar) exigem servidor com UMA base e come\xE7am SEMPRE em simula\xE7\xE3o (confirmar=false): mostre ao usu\xE1rio o estado atual, a requisi\xE7\xE3o e o efeito, e s\xF3 repita com confirmar=true depois de ele aprovar explicitamente. Depois de executar, mostre o diff antes/depois.";
 async function main() {
   const servers = loadServers();
   const cfg = servers[0];

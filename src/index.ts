@@ -20,6 +20,8 @@ export const INSTRUCTIONS =
   "Para relatórios por período, POPs, CPEs/ONUs, notas fiscais e sessões RADIUS, use as " +
   "ferramentas GraphQL (hubsoft_graphql_consultas → hubsoft_graphql_tipo → hubsoft_graphql). " +
   "Faturas com status 'aguardando' e vencimento futuro (ex.: parcelas de carnê) não estão vencidas. " +
+  "Para exportar a base inteira (serviços, CPEs, equipamentos/POPs) para planilha, use hubsoft_exportar_* com " +
+  "servidor de UMA base: elas gravam um CSV e devolvem só o resumo; não pagine para montar planilhas. " +
   "Senhas (ex.: PPPoE) são mascaradas por padrão. " +
   "Dados de clientes são pessoais (LGPD): mostre apenas o necessário. " +
   "Quando o login exige 2FA, o próprio MCP abre uma página no navegador para o usuário digitar o código. " +

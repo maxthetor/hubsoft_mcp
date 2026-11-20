@@ -20,7 +20,13 @@ export function diagnosticoVariaveis(): string[] {
 const TODOS = new Set(["", "todos", "todas", "all", "*"]);
 
 /** Leituras que mesmo assim exigem uma única base (ex.: abrir gerenciamento ACS de uma CPE). */
-const UMA_BASE_LEITURA = new Set(["hubsoft_cpe_iniciar_gerenciamento", "hubsoft_conectar"]);
+const UMA_BASE_LEITURA = new Set([
+  "hubsoft_cpe_iniciar_gerenciamento",
+  "hubsoft_conectar",
+  "hubsoft_exportar_servicos",
+  "hubsoft_exportar_cpes",
+  "hubsoft_exportar_equipamentos",
+]);
 
 /** Ferramentas que alteram dados: exigem exatamente um servidor (IDs não valem entre bases). */
 function exigeUmServidor(t: ToolDef) {
@@ -202,11 +208,11 @@ export function collectMultiTools(servers: HubsoftConfig[]): ToolDef[] {
               ...(t.config.inputSchema ?? {}),
             },
           },
-          cb: async (args: any) => {
+          cb: async (args: any, extra?: any) => {
             try {
               const { servidor, ...resto } = args ?? {};
               resolverUmaBase(servers, servidor);
-              return comServidor(unico.nome, await t.cb(resto), max);
+              return comServidor(unico.nome, await t.cb(resto, extra), max);
             } catch (e) {
               return fail(e);
             }
@@ -247,7 +253,7 @@ export function collectMultiTools(servers: HubsoftConfig[]): ToolDef[] {
             : "Sem o parâmetro servidor, consulta todas as bases e agrupa o resultado por base."),
         inputSchema: { servidor: servidorParam, ...(base.config.inputSchema ?? {}) },
       },
-      cb: async (args: any) => {
+      cb: async (args: any, extra?: any) => {
         try {
           const { servidor, ...resto } = args ?? {};
           if (umSo) {
@@ -259,7 +265,7 @@ export function collectMultiTools(servers: HubsoftConfig[]): ToolDef[] {
                   (base.config.annotations?.readOnlyHint === false ? " (escrita não habilitada: HUBSOFT_PERMITIR_ESCRITA)." : "."),
               );
             }
-            return comServidor(alvo.nome, await def.cb(resto), max);
+            return comServidor(alvo.nome, await def.cb(resto, extra), max);
           }
           const alvos = resolverServidores(servers, servidor);
 

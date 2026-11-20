@@ -51,6 +51,7 @@ Alguns provedores têm mais de uma base Hubsoft (ex.: `base_pf`, `base_pj`, `bas
 | Faturas de um cliente | `faturas_cliente` (resumo enxuto; `detalhado=true` só se pedirem itens/descontos/NF) |
 | Atendimentos / OS de um cliente | `atendimentos_cliente` / `ordens_servico_cliente` |
 | Relatórios por período, POPs, CPEs/ONUs, NF-e/NFS-e, sessões RADIUS, logins | GraphQL: `graphql_consultas` → `graphql_tipo` → `graphql` ([referências/graphql.md](references/graphql.md)) |
+| "Exporte/gere uma planilha dos serviços, CPEs/ONUs, equipamentos ou POPs" | `exportar_servicos`, `exportar_cpes`, `exportar_equipamentos`: gravam um CSV e devolvem só o resumo. Exigem `servidor` com **uma** base (pergunte qual se o usuário não disser). Se vier `completo=false`, repita com `pagina_inicial` = `retomar_de_pagina` |
 | Rota REST sem ferramenta própria | `consulta` (GET em `/api/v1/integracao/<rota>`) |
 
 ## Regras de negócio (armadilhas reais)
@@ -82,3 +83,4 @@ Vincular ONU já autorizada sem desprovisionar: `configurar_autenticacao` (phy_a
 - Mostre só os dados pessoais necessários para a pergunta. Em listas, prefira nome, código e status.
 - Senhas (ex.: PPPoE) vêm mascaradas (`***`). Não tente obtê-las por outro caminho.
 - Não copie dados de clientes para arquivos, planilhas ou mensagens sem pedido explícito do usuário.
+- As exportações CSV só rodam com pedido explícito e já excluem CPF/CNPJ, RG, telefones, e-mails, endereços e senhas. Não abra o CSV para mostrar os dados na conversa; informe o caminho do arquivo.
