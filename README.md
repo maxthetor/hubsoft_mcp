@@ -269,12 +269,15 @@ node scripts/hubsoft.mjs graphql --query '{ pops(first: 10) { data { id_pop } } 
 | `hubsoft_reiniciar_cpe` ✏️⚠️ | Reinicia a CPE (cliente fica sem conexão durante o reboot) |
 | `hubsoft_restaurar_cpe` ✏️⚠️ | Restaura a CPE para fábrica (exige `confirmar_phy_addr`) |
 | `hubsoft_cpe_gerenciar` ✏️ | Altera parâmetros da CPE via ACS (SSID, senha Wi-Fi…) |
+| `hubsoft_vincular_lote` ✏️⚠️ | Vincula em lote ONUs já autorizadas a partir de um CSV em `HUBSOFT_LOTE_DIR` (simulação, depois execução) |
+| `hubsoft_equipamento_inativar` ✏️⚠️🔧 | Inativa (soft delete) um equipamento de conexão; recusa se houver serviços ligados, salvo `forcar=true` |
+| `hubsoft_equipamento_reativar` ✏️🔧 | Reativa um equipamento inativado (restore) |
 
 Com 2 ou mais bases, todas as ferramentas aceitam o parâmetro `servidor` (padrão: todas).
 
 📄 = exportação para CSV (só leitura no Hubsoft; grava um arquivo local). Detalhes em [Exportações (CSV)](#exportações-csv).
 
-✏️ = escrita/controle, **desligada por padrão**. ⚠️ = destrutiva. Detalhes em [Escrita e controle de CPE](#escrita-e-controle-de-cpe). Todas as ferramentas têm `title` e `readOnlyHint`/`destructiveHint`/`idempotentHint`.
+✏️ = escrita/controle, **desligada por padrão**. ⚠️ = destrutiva. 🔧 = usa **rota interna não documentada** do Hubsoft (pode mudar). Detalhes em [Escrita e controle de CPE](#escrita-e-controle-de-cpe). Todas as ferramentas têm `title` e `readOnlyHint`/`destructiveHint`/`idempotentHint`.
 
 **Atualizações do Hubsoft:** as ferramentas GraphQL leem o esquema **ao vivo**. Consultas novas que o Hubsoft lançar ficam disponíveis na hora, sem atualizar este projeto.
 
@@ -317,6 +320,7 @@ Serve para vincular ONTs/ONUs **já autorizadas na OLT** aos serviços do Hubsof
 6. **Sem nova tentativa em POST.** Única exceção: um 401 renova o token **uma vez** e reenvia. Um 429 devolve o `retry_after` e não repete.
 7. **Auditoria.** Cada execução (`confirmar=true`) vira uma linha em `HUBSOFT_AUDITORIA`, com data/hora, base, ferramenta, URL, corpo, status, resposta e diff. Tokens, `client_secret` e senhas aparecem como `***`.
 8. **Senhas.** A `password` da autenticação nunca é exibida. Senhas de Wi-Fi vêm mascaradas; só aparecem com `mostrar_senhas=true`.
+9. **CPF/CNPJ.** Ver [Privacidade](#privacidade): sempre mascarados, também nos diffs e na auditoria.
 
 ### Exemplo: vincular uma ONU já autorizada
 
@@ -331,6 +335,43 @@ Serve para vincular ONTs/ONUs **já autorizadas na OLT** aos serviços do Hubsof
 ```
 
 Na simulação, `hubsoft_desvincular_cpe` mostra o rollback pronto: `configurar_autenticacao` com o `phy_addr` e o `id_interface_conexao` atuais, seguido de `vincular_cpe`.
+
+### Vínculo em lote (`hubsoft_vincular_lote`)
+
+Faz o mesmo fluxo do exemplo acima para várias linhas de um CSV, **uma linha por vez** (nunca em paralelo).
+
+1. **Arquivo.** CSV com `;`, UTF-8 (com ou sem BOM), **dentro de `HUBSOFT_LOTE_DIR`** (padrão `~/hubsoft-lotes`). Caminhos fora dela (`../`, absolutos, links) são recusados.
+2. **Colunas.** Obrigatórias: `base`, `id_cliente_servico`, `sn`. Opcionais: `aprovar` e `desvincular_antes` (`S`/`N`).
+3. **Parâmetros.** `servidor` (uma base; só as linhas dessa base são processadas), `arquivo`, `confirmar` (padrão `false`), `limite` (padrão 50, máx. 300), `so_aprovadas` (padrão `true`: só linhas com `aprovar=S`) e `a_partir_da_linha` (para retomar).
+4. **Por linha:** leitura do serviço e da CPE → [`desvincular_cpe` só da CPE antiga, com o `phy_addr` dela, se `desvincular_antes=S`] → `configurar_autenticacao {id_cliente_servico, phy_addr: sn}` (o 422 "não é necessário a alteração" conta como OK) → `vincular_cpe {id_cliente_servico}` → releitura (OLT, interface e CPEs depois).
+5. **Linhas puladas (com motivo):** `SERVICO_CANCELADO`, `SN_FORA_DO_INVENTARIO`, `SN_EM_OUTRO_SERVICO`, `JA_VINCULADO`, `OUTRA_CPE_VINCULADA` (o serviço já tem outra CPE não-MAC e `desvincular_antes≠S`), `VARIAS_CPES_VINCULADAS`, `SERVICO_NAO_ENCONTRADO`, `NAO_APROVADA`, `OUTRA_BASE`, `DUPLICADO_NO_ARQUIVO` (mesmo serviço ou mesmo SN duas vezes), `DADOS_INVALIDOS`, `ACIMA_DO_LIMITE`. CPEs identificadas por MAC (com `:`/`-`, ou iguais ao `mac_addr` do serviço) não bloqueiam e nunca são desvinculadas.
+6. **Simulação.** Com `confirmar=false`, nada é enviado: cada linha é classificada como `EXECUTARIA` ou `PULADO` + motivo, e o arquivo sai como `<arquivo>_simulacao_<data>.csv`.
+7. **Execução.** Grava `<arquivo>_resultado_<data>.csv` ao lado do arquivo de entrada (nunca sobrescreve), com `resultado` (`OK`/`PULADO`/`ERRO`), `motivo`, `mensagem_api`, `cpe_desvinculada`, estado antes e `olt_depois`, `interface_depois`, `cpes_depois`. Cada linha executada vira um registro na auditoria JSONL.
+8. **Segurança.** POST nunca é repetido; num 429, a linha vira `ERRO` e o lote espera o `retry_after` antes da próxima. O lote **para após 5 erros seguidos** (`LOTE_INTERROMPIDO`). Rodar o mesmo arquivo de novo é seguro: o que já foi feito vira `JA_VINCULADO`.
+9. **Tempo.** Para caber no limite de ~80 s do Claude Desktop/Cowork, o lote para **entre linhas** quando passa de `HUBSOFT_LOTE_TEMPO_MAX_S` (padrão 55 s) e o resumo traz `retomar_a_partir_da_linha`.
+10. **Resultado da ferramenta:** só o resumo (contagem por resultado e por motivo, caminho do CSV de resultado e as primeiras 10 falhas, sem dados pessoais).
+
+```
+base;id_cliente_servico;sn;aprovar;desvincular_antes
+base_pf;1373;ALCLFC203278;S;N
+base_pf;1388;FHTT0A1B2C3D;S;S
+```
+
+### Inativar e reativar equipamento (rotas internas) 🔧
+
+> ⚠️ **Rotas internas, não documentadas.** Ficam fora de `/api/v1/integracao` (mesmo host e mesmo token Bearer) e podem mudar ou deixar de funcionar numa atualização do Hubsoft, sem aviso.
+
+| Ação | Rota |
+|---|---|
+| Leitura prévia | `GET /api/v1/rede/equipamento_conexao/{id}` (nome, ipv4, `deleted_at`, nº de interfaces) |
+| Inativar (soft delete; preenche `deleted_at`) | `DELETE /api/v1/rede/equipamento_conexao/{id}` |
+| Reativar | `GET /api/v1/rede/equipamento_conexao/{id}/restore` (um GET que altera dados: nunca é repetido) |
+
+- **Parâmetros:** `servidor` (uma base), `id_equipamento`, `confirmar` (padrão `false`) e `confirmar_nome`, que precisa ser **igual ao nome atual** para executar.
+- **Serviços ligados.** Antes de inativar, conta os serviços não cancelados com `equipamento_conexao` = esse equipamento (por nome + IP): usa a última exportação **completa** de serviços da base com até 24 h (`hubsoft_exportar_servicos`); sem ela, varre `cliente/todos` com `relacoes=equipamento_conexao` (até ~45 s). `fonte_contagem` força `api` ou `exportacao`.
+- **Recusa** a inativação se houver serviços ligados ou se a contagem não terminar, salvo `forcar=true`.
+- **Reativar.** Um equipamento inativo costuma não aparecer na leitura prévia (404). Nesse caso o nome é conferido depois do restore e uma divergência é apontada, com a sugestão de inativar de novo.
+- O resultado traz o diff antes/depois e o comando para reverter; cada execução vai para a auditoria.
 
 ## Configuração
 
@@ -357,6 +398,8 @@ Na simulação, `hubsoft_desvincular_cpe` mostra o rollback pronto: `configurar_
 | `HUBSOFT_EXPORT_DIR` | `~/hubsoft-exportacoes` | Pasta onde as ferramentas 📄 gravam os CSV |
 | `HUBSOFT_EXPORT_REQ_S` | `20` | Limite de requisições por segundo por base nas exportações |
 | `HUBSOFT_EXPORT_PARALELO` | `4` | Páginas buscadas ao mesmo tempo nas exportações (máx. 10) |
+| `HUBSOFT_LOTE_DIR` | `~/hubsoft-lotes` | Única pasta de onde `hubsoft_vincular_lote` lê CSV (e onde grava o resultado) |
+| `HUBSOFT_LOTE_TEMPO_MAX_S` | `55` | Tempo máximo de uma chamada do lote; depois disso para entre linhas e informa de onde retomar |
 | `HUBSOFT_2_*` … `HUBSOFT_9_*` | — | Bases adicionais (mesmos sufixos: `NOME`, `DESCRICAO`, `URL`, `CLIENT_ID`, `CLIENT_SECRET`, `USERNAME`, `PASSWORD`, `OTP_SECRET`, `GRAPHQL_PATH`, `PERMITIR_ESCRITA`) |
 | `HUBSOFT_CONFIG` | `~/.config/hubsoft/servidores.json` | Arquivo com a lista de bases |
 | `HUBSOFT_SERVIDOR` | primeira | Base usada por `npm run probe` e `npm run schema` |
@@ -378,6 +421,8 @@ O código-fonte fica em `src/`. Os arquivos `server/hubsoft-mcp.mjs` e `skills/h
 ## Privacidade
 
 O projeto roda **no seu computador**, não tem servidor próprio e não coleta dados nem telemetria. Os dados trafegam só entre o seu computador, a API do Hubsoft do seu provedor e o agente de IA que você escolheu. Senhas retornadas pelo Hubsoft (ex.: PPPoE) são mascaradas por padrão. Veja a [Política de Privacidade](PRIVACY.md).
+
+**CPF/CNPJ (LGPD).** Em **todas** as ferramentas, CPF/CNPJ saem mascarados nos resultados, nos diffs, nas mensagens de erro, nos CSV e no log de auditoria: só os **3 últimos dígitos** ficam visíveis, mantendo o tamanho (`98765432100` → `********100`; `11.222.333/0001-81` → `***********181`). Vale para campos como `cpf_cnpj`, `cpf`, `cnpj` e também para CPF/CNPJ dentro de textos (razão social de MEI, mensagens da API): formatos `000.000.000-00`, `00.000.000/0000-00` e sequências soltas de 11 ou 14 dígitos. Identificadores (`id_*`, `codigo*`), linha digitável, código de barras, PIX, `phy_addr` e `mac_addr` não são alterados. `HUBSOFT_EXPOR_SENHAS` não desliga essa máscara. A busca por CPF/CNPJ (ex.: `situacao_cliente`) continua funcionando: a máscara vale só para a saída.
 
 ## Suporte
 

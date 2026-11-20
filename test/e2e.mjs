@@ -149,7 +149,7 @@ const espV = esperaSem(st => st !== "cancelado" && st !== "inativo");
 assert.equal(hg.clientes_na_base, 1203); assert.equal(hg.clientes_lidos, 1203); assert.equal(hg.completo, true, "2ª passada completou");
 assert.ok(hg.repetidos_descartados >= 500, "página repetida descartada");
 assert.equal(hg.total_sem_servico_ativo, espV.length);
-assert.equal(hg.clientes[0].cpf_cnpj, espV[0].cpf_cnpj);
+assert.equal(hg.clientes[0].cpf_cnpj, "********" + espV[0].cpf_cnpj.slice(-3), "CPF/CNPJ mascarado (LGPD)");
 assert.ok(hg.por_situacao.sem_servicos > 0 && hg.por_situacao["cancelado+inativo"] > 0);
 assert.ok(!JSON.stringify(hg).includes("SECRETO") && !JSON.stringify(hg).includes("pppoe!"), "lista enxuta, sem RG nem senha");
 const hh = JSON.parse((await c.callTool({ name: "hubsoft_clientes_ativos_sem_servico_ativo", arguments: { criterio: "habilitado", limite: 5 } })).content[0].text);

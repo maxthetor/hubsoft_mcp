@@ -360,7 +360,7 @@ export class HubsoftClient {
    * - demais códigos: sem nova tentativa.
    */
   async raw(
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "DELETE",
     path: string,
     opts: { query?: Query; body?: unknown } = {},
   ): Promise<{ status: number; ok: boolean; url: string; body: any; retryAfter?: number; tokenRenovado?: boolean }> {

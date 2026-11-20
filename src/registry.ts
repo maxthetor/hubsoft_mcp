@@ -10,6 +10,8 @@ import { registerLeitura } from "./tools/leitura.js";
 import { registerEscrita } from "./tools/escrita.js";
 import { registerGraphql } from "./tools/graphql.js";
 import { registerExportacao } from "./tools/exportacao.js";
+import { registerLote } from "./tools/lote.js";
+import { registerEquipamento } from "./tools/equipamento.js";
 
 /** Definição de uma ferramenta, compartilhada entre o servidor MCP e a CLI. */
 export interface ToolDef {
@@ -49,5 +51,7 @@ export function collectTools(hs: HubsoftClient): ToolDef[] {
   registerCpe(collector, hs); // leitura ACS sempre; escritas só com permissão
   registerGraphql(collector, hs);
   registerExportacao(collector, hs); // só GET; grava CSV local
+  registerLote(collector, hs); // escrita: só com permissão
+  registerEquipamento(collector, hs); // escrita (rotas internas): só com permissão
   return defs;
 }

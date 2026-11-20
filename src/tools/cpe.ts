@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { HubsoftClient } from "../client.js";
-import { API, fail, ok } from "../util.js";
+import { API, fail, mascararDocumentos, ok } from "../util.js";
 
 /**
  * Ferramentas de escrita/controle de CPE (vínculo de ONT/ONU já autorizada na OLT ao
@@ -18,7 +18,7 @@ import { API, fail, ok } from "../util.js";
  *  - auditoria JSONL sem segredos.
  */
 
-const RELACOES = "interface,equipamento_conexao,interface_roteamento,equipamento_roteamento,cpes";
+export const RELACOES = "interface,equipamento_conexao,interface_roteamento,equipamento_roteamento,cpes";
 const SEGREDO = /password|senha|secret|token/i;
 
 /** Normaliza phy_addr/MAC para comparação: sem separadores, maiúsculas. */
@@ -51,7 +51,7 @@ function idsServico(o: any, acc = new Set<number>()): Set<number> {
   return acc;
 }
 
-function snapshotServico(sv: any) {
+export function snapshotServico(sv: any) {
   const out: Record<string, unknown> = {
     id_cliente_servico: sv.id_cliente_servico,
     status: sv.status ?? sv.servico_status?.descricao,
@@ -68,7 +68,7 @@ function snapshotServico(sv: any) {
   return out;
 }
 
-function resumoCpe(c: any) {
+export function resumoCpe(c: any) {
   return {
     id_cpe: c.id_cpe,
     phy_addr: c.phy_addr,
@@ -82,7 +82,7 @@ function resumoCpe(c: any) {
   };
 }
 
-function primeiraLista(body: any): any[] {
+export function primeiraLista(body: any): any[] {
   if (Array.isArray(body)) return body;
   for (const k of ["cpes", "dados", "data", "registros"]) if (Array.isArray(body?.[k])) return body[k];
   for (const v of Object.values(body ?? {})) if (Array.isArray(v)) return v as any[];
@@ -133,21 +133,25 @@ export function diff(antes: unknown, depois: unknown) {
     }));
 }
 
-/** Copia profunda com segredos e senhas Wi-Fi trocados por "***" (para auditoria e exibição). */
+/** Copia profunda com segredos e senhas Wi-Fi trocados por "***" e CPF/CNPJ mascarados (auditoria e exibição). */
 export function semSegredos(o: any): any {
-  if (Array.isArray(o)) return o.map(semSegredos);
+  return mascararDocumentos(semSegredosBruto(o));
+}
+
+function semSegredosBruto(o: any): any {
+  if (Array.isArray(o)) return o.map(semSegredosBruto);
   if (!o || typeof o !== "object") return o;
   const senhaWifi = typeof o.prefixo === "string" && /password/i.test(o.prefixo);
   return Object.fromEntries(
     Object.entries(o).map(([k, v]) => {
       if (SEGREDO.test(k) && (v === null || typeof v !== "object")) return [k, mascara(v)];
       if (senhaWifi && ["valor", "atual", "novo"].includes(k)) return [k, mascara(v)];
-      return [k, semSegredos(v)];
+      return [k, semSegredosBruto(v)];
     }),
   );
 }
 
-function auditar(hs: HubsoftClient, registro: Record<string, unknown>) {
+export function auditar(hs: HubsoftClient, registro: Record<string, unknown>) {
   const arq = hs.config.auditoria;
   if (!arq) return;
   try {
@@ -158,7 +162,7 @@ function auditar(hs: HubsoftClient, registro: Record<string, unknown>) {
   }
 }
 
-function responder(hs: HubsoftClient, data: unknown, erro = false) {
+export function responder(hs: HubsoftClient, data: unknown, erro = false) {
   const r = ok(data, hs.config.maxResponseChars);
   return erro ? { ...r, isError: true } : r;
 }

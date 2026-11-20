@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// hubsoft-mcp 0.11.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
+// hubsoft-mcp 0.12.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
 // Arquivo gerado por scripts/bundle.mjs a partir de src/. Não edite.
 import { createRequire as __cr } from "node:module"; const require = __cr(import.meta.url);
 var __create = Object.create;
@@ -2987,7 +2987,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve.call(this, root, ref);
+      let _sch = resolve2.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -3014,7 +3014,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve(root, ref) {
+    function resolve2(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3878,7 +3878,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve(baseURI, relativeURI, options) {
+    function resolve2(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const {
         parsed: baseParsed,
@@ -3914,50 +3914,50 @@ var require_fast_uri = __commonJS({
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
-    function resolveComponent(base, relative, options, skipNormalization) {
+    function resolveComponent(base, relative2, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
         base = parse4(serialize(base, options), options);
-        relative = parse4(serialize(relative, options), options);
+        relative2 = parse4(serialize(relative2, options), options);
       }
       options = options || {};
-      if (!options.tolerant && relative.scheme) {
-        target.scheme = relative.scheme;
-        target.userinfo = relative.userinfo;
-        target.host = relative.host;
-        target.port = relative.port;
-        target.path = removeDotSegments(relative.path || "");
-        target.query = relative.query;
+      if (!options.tolerant && relative2.scheme) {
+        target.scheme = relative2.scheme;
+        target.userinfo = relative2.userinfo;
+        target.host = relative2.host;
+        target.port = relative2.port;
+        target.path = removeDotSegments(relative2.path || "");
+        target.query = relative2.query;
       } else {
-        if (relative.userinfo !== void 0 || relative.host !== void 0 || relative.port !== void 0) {
-          target.userinfo = relative.userinfo;
-          target.host = relative.host;
-          target.port = relative.port;
-          target.path = removeDotSegments(relative.path || "");
-          target.query = relative.query;
+        if (relative2.userinfo !== void 0 || relative2.host !== void 0 || relative2.port !== void 0) {
+          target.userinfo = relative2.userinfo;
+          target.host = relative2.host;
+          target.port = relative2.port;
+          target.path = removeDotSegments(relative2.path || "");
+          target.query = relative2.query;
         } else {
-          if (!relative.path) {
+          if (!relative2.path) {
             target.path = base.path;
-            if (relative.query !== void 0) {
-              target.query = relative.query;
+            if (relative2.query !== void 0) {
+              target.query = relative2.query;
             } else {
               target.query = base.query;
             }
           } else {
-            if (relative.path[0] === "/") {
-              target.path = removeDotSegments(relative.path);
+            if (relative2.path[0] === "/") {
+              target.path = removeDotSegments(relative2.path);
             } else {
               const baseHasAuthority = base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0;
               if (baseHasAuthority && !base.path) {
-                target.path = "/" + relative.path;
+                target.path = "/" + relative2.path;
               } else if (!base.path) {
-                target.path = relative.path;
+                target.path = relative2.path;
               } else {
-                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative.path;
+                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative2.path;
               }
               target.path = base.scheme === void 0 && !baseHasAuthority && target.path[0] !== "/" ? removeDotSegmentsRelative(target.path) : removeDotSegments(target.path);
             }
-            target.query = relative.query;
+            target.query = relative2.query;
           }
           target.userinfo = base.userinfo;
           target.host = base.host;
@@ -3965,7 +3965,7 @@ var require_fast_uri = __commonJS({
         }
         target.scheme = base.scheme;
       }
-      target.fragment = relative.fragment;
+      target.fragment = relative2.fragment;
       return target;
     }
     function equal(uriA, uriB, options) {
@@ -4269,7 +4269,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve,
+      resolve: resolve2,
       resolveComponent,
       equal,
       serialize,
@@ -15957,7 +15957,7 @@ var recursive = /* @__PURE__ */ new WeakMap();
 var NONE = 0;
 var ASSUMED = 1;
 var PROVEN = 2;
-function isRecursive(inst, stack, resolve) {
+function isRecursive(inst, stack, resolve2) {
   const cached2 = recursive.get(inst);
   if (cached2 !== void 0)
     return cached2 ? PROVEN : NONE;
@@ -15967,7 +15967,7 @@ function isRecursive(inst, stack, resolve) {
   let result = NONE;
   const check2 = (child) => {
     if (result !== PROVEN && child?._zod) {
-      const answer = isRecursive(child, stack, resolve);
+      const answer = isRecursive(child, stack, resolve2);
       if (answer > result)
         result = answer;
     }
@@ -15978,7 +15978,7 @@ function isRecursive(inst, stack, resolve) {
       const desc = Object.getOwnPropertyDescriptor(sh, key);
       if (spread && !desc.enumerable)
         continue;
-      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve) : NONE;
+      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve2) : NONE;
       if (child > answer)
         answer = child;
     }
@@ -16042,7 +16042,7 @@ function isRecursive(inst, stack, resolve) {
       break;
     // `$ZodLazy` caches its inner on the def, so a resolved edge is followed exactly
     case "lazy": {
-      const inner = def._cachedInner ?? (resolve ? inst._zod.innerType : void 0);
+      const inner = def._cachedInner ?? (resolve2 ? inst._zod.innerType : void 0);
       merge2(inner ? isRecursive(inner, stack, false) : ASSUMED);
       break;
     }
@@ -34480,7 +34480,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+        await new Promise((resolve2) => setTimeout(resolve2, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error62) {
@@ -34497,7 +34497,7 @@ var Protocol = class {
    */
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve2, reject) => {
       const earlyReject = (error62) => {
         reject(error62);
       };
@@ -34575,7 +34575,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve(parseResult.data);
+            resolve2(parseResult.data);
           }
         } catch (error62) {
           reject(error62);
@@ -34837,12 +34837,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve2, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve, interval);
+      const timeoutId = setTimeout(resolve2, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -35982,7 +35982,7 @@ var McpServer = class {
     let task = createTaskResult.task;
     const pollInterval = task.pollInterval ?? 5e3;
     while (task.status !== "completed" && task.status !== "failed" && task.status !== "cancelled") {
-      await new Promise((resolve) => setTimeout(resolve, pollInterval));
+      await new Promise((resolve2) => setTimeout(resolve2, pollInterval));
       const updatedTask = await extra.taskStore.getTask(taskId);
       if (!updatedTask) {
         throw new McpError(ErrorCode.InternalError, `Task ${taskId} not found during polling`);
@@ -36646,12 +36646,12 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve) => {
+    return new Promise((resolve2) => {
       const json2 = serializeMessage(message);
       if (this._stdout.write(json2)) {
-        resolve();
+        resolve2();
       } else {
-        this._stdout.once("drain", resolve);
+        this._stdout.once("drain", resolve2);
       }
     });
   }
@@ -36781,6 +36781,7 @@ function simNao(v) {
 }
 var AUDITORIA_PADRAO = join2(homedir2(), ".config", "hubsoft", "auditoria.jsonl");
 var EXPORT_PADRAO = join2(homedir2(), "hubsoft-exportacoes");
+var LOTE_PADRAO = join2(homedir2(), "hubsoft-lotes");
 function pasta(v, padrao) {
   if (!v) return padrao;
   return v === "~" ? homedir2() : v.replace(/^~(?=[\\/])/, homedir2());
@@ -36794,7 +36795,8 @@ function globais() {
     auditoria: aud === void 0 ? AUDITORIA_PADRAO : aud.toLowerCase() === "off" ? "" : aud,
     maxResponseChars: Number(env("HUBSOFT_MAX_RESPONSE_CHARS") ?? 6e4),
     exposeSecrets: bool("HUBSOFT_EXPOR_SENHAS", false),
-    exportDir: pasta(env("HUBSOFT_EXPORT_DIR"), EXPORT_PADRAO)
+    exportDir: pasta(env("HUBSOFT_EXPORT_DIR"), EXPORT_PADRAO),
+    loteDir: pasta(env("HUBSOFT_LOTE_DIR"), LOTE_PADRAO)
   };
 }
 function lerArquivo(caminho) {
@@ -36914,23 +36916,23 @@ O token fica salvo; este c\xF3digo n\xE3o ser\xE1 pedido de novo.`;
   return { titulo, msg };
 }
 function executar(cmd, args, env2, shell = false, ocultar = true) {
-  return new Promise((resolve) => {
+  return new Promise((resolve2) => {
     let out = "";
     let p;
     try {
       p = spawn(cmd, args, { env: { ...process.env, ...env2 }, windowsHide: ocultar, shell, stdio: ["ignore", "pipe", "ignore"] });
     } catch {
-      return resolve({ code: -1, out: "" });
+      return resolve2({ code: -1, out: "" });
     }
     const t = setTimeout(() => p.kill(), TEMPO_LIMITE_MS);
     p.stdout.on("data", (d) => out += d);
     p.on("error", () => {
       clearTimeout(t);
-      resolve({ code: -1, out: "" });
+      resolve2({ code: -1, out: "" });
     });
     p.on("close", (code) => {
       clearTimeout(t);
-      resolve({ code, out });
+      resolve2({ code, out });
     });
   });
 }
@@ -37574,14 +37576,39 @@ var exposeSecrets = false;
 function setExposeSecrets(v) {
   exposeSecrets = v;
 }
+var DIGITOS_VISIVEIS = 3;
+var CAMPO_DOC = /(^|_)(cpf|cnpj|cpf_cnpj|cnpj_cpf|documento|doc_cliente)(_|$)/i;
+var SEM_VARREDURA = /^(id|uuid)(_|$)|(_id|_uuid)$|^codigo|linha_digitavel|codigo_barras|nosso_numero|pix|qr_?code|phy_addr|mac_addr|serial/i;
+function mascararDoc(v) {
+  if (v === null || v === void 0 || v === "") return v;
+  if (typeof v === "string" && v.includes("*")) return v;
+  const d = String(v).replace(/\D/g, "");
+  if (!d) return typeof v === "string" ? v : "***";
+  return "*".repeat(Math.max(0, d.length - DIGITOS_VISIVEIS)) + d.slice(-DIGITOS_VISIVEIS);
+}
+var DOC_NO_TEXTO = /(?<![\w./-])(?:\d{3}\.\d{3}\.\d{3}-\d{2}|\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}|\d{14}|\d{11})(?![\w/-]|\.\d)/g;
+function mascararTexto(s) {
+  return s.replace(DOC_NO_TEXTO, (m) => String(mascararDoc(m)));
+}
+function mascararDocumentos(v, chave2 = "") {
+  if (Array.isArray(v)) return v.map((x) => mascararDocumentos(x, chave2));
+  if (v && typeof v === "object") {
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, mascararDocumentos(x, k)]));
+  }
+  if (CAMPO_DOC.test(chave2) && v !== null && typeof v !== "boolean") return mascararDoc(v);
+  if (typeof v === "string" && !SEM_VARREDURA.test(chave2)) return mascararTexto(v);
+  return v;
+}
 function redact(v) {
-  if (exposeSecrets) return v;
-  if (Array.isArray(v)) return v.map(redact);
+  return mascararDocumentos(exposeSecrets ? v : semSenhas(v));
+}
+function semSenhas(v) {
+  if (Array.isArray(v)) return v.map(semSenhas);
   if (v && typeof v === "object") {
     return Object.fromEntries(
       Object.entries(v).map(([k, x]) => [
         k,
-        SENSITIVE.test(k) && x !== null && typeof x !== "object" ? "***" : redact(x)
+        SENSITIVE.test(k) && x !== null && typeof x !== "object" ? "***" : semSenhas(x)
       ])
     );
   }
@@ -37603,10 +37630,10 @@ function fail(err) {
     e.message = `N\xE3o foi poss\xEDvel conectar ao Hubsoft (${c}). Verifique HUBSOFT_URL e a rede.`;
   }
   const detail = e?.body ? `
-Detalhes: ${JSON.stringify(e.body).slice(0, 1500)}` : "";
+Detalhes: ${JSON.stringify(redact(e.body)).slice(0, 1500)}` : "";
   return {
     isError: true,
-    content: [{ type: "text", text: `${e?.message ?? String(err)}${detail}` }]
+    content: [{ type: "text", text: mascararTexto(`${e?.message ?? String(err)}${detail}`) }]
   };
 }
 async function run(maxChars, fn) {
@@ -38238,14 +38265,17 @@ function diff(antes, depois) {
   }));
 }
 function semSegredos(o) {
-  if (Array.isArray(o)) return o.map(semSegredos);
+  return mascararDocumentos(semSegredosBruto(o));
+}
+function semSegredosBruto(o) {
+  if (Array.isArray(o)) return o.map(semSegredosBruto);
   if (!o || typeof o !== "object") return o;
   const senhaWifi = typeof o.prefixo === "string" && /password/i.test(o.prefixo);
   return Object.fromEntries(
     Object.entries(o).map(([k, v]) => {
       if (SEGREDO.test(k) && (v === null || typeof v !== "object")) return [k, mascara(v)];
       if (senhaWifi && ["valor", "atual", "novo"].includes(k)) return [k, mascara(v)];
-      return [k, semSegredos(v)];
+      return [k, semSegredosBruto(v)];
     })
   );
 }
@@ -39071,6 +39101,12 @@ async function paginar(opts) {
   const total = ultima - inicio + 1;
   opts.progresso?.(res.paginas_lidas, total);
   for (let p = inicio + 1; p <= ultima; p += paralelo) {
+    if (opts.prazo && Date.now() > opts.prazo) {
+      res.tempo_esgotado = true;
+      res.pagina_falhou = p;
+      res.erros.push(`tempo esgotado antes da p\xE1gina ${p}`);
+      return res;
+    }
     const nums = Array.from({ length: Math.min(paralelo, ultima - p + 1) }, (_, i) => p + i);
     const lote = await Promise.all(nums.map(ler2));
     for (let i = 0; i < lote.length; i++) {
@@ -39091,7 +39127,7 @@ async function paginar(opts) {
 var CAMPO_PESSOAL = /cpf|cnpj|(^|_)rg(_|$)|telefone|celular|whatsapp|e_?mail|endereco|logradouro|bairro|(^|_)cep(_|$)|complemento|senha|password|secret|token|nascimento/i;
 function celula(v) {
   if (v === null || v === void 0) return "";
-  const s = typeof v === "object" ? JSON.stringify(v) : String(v);
+  const s = mascararTexto(typeof v === "object" ? JSON.stringify(v) : String(v));
   return /[;"\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 function gerarCsv(colunas, linhas) {
@@ -39104,8 +39140,10 @@ function carimbo(d = /* @__PURE__ */ new Date()) {
   return `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())}_${dois(d.getHours())}-${dois(d.getMinutes())}-${dois(d.getSeconds())}`;
 }
 function gravarCsv(dir, tipo, base, colunas, linhas, parcial = false) {
+  return gravarCsvNome(dir, `${tipo}_${base}_${carimbo()}${parcial ? "_parcial" : ""}`, colunas, linhas);
+}
+function gravarCsvNome(dir, nome, colunas, linhas) {
   mkdirSync3(dir, { recursive: true });
-  const nome = `${tipo}_${base}_${carimbo()}${parcial ? "_parcial" : ""}`;
   const dados = gerarCsv(colunas, linhas);
   for (let n = 1; n < 1e3; n++) {
     const arquivo = join3(dir, `${nome}${n > 1 ? `_${n}` : ""}.csv`);
@@ -39120,6 +39158,38 @@ function gravarCsv(dir, tipo, base, colunas, linhas, parcial = false) {
 }
 var juntar = (v) => v.filter((x) => x !== null && x !== void 0 && x !== "").join("|");
 var segundos = (inicio) => Math.round((Date.now() - inicio) / 100) / 10;
+function lerCsv(texto) {
+  const t = texto.replace(/^\uFEFF/, "");
+  const linhas = [];
+  let campo = "";
+  let linha = [];
+  let aspas = false;
+  for (let i = 0; i < t.length; i++) {
+    const ch = t[i];
+    if (aspas) {
+      if (ch === '"') {
+        if (t[i + 1] === '"') {
+          campo += '"';
+          i++;
+        } else aspas = false;
+      } else campo += ch;
+    } else if (ch === '"' && campo === "") aspas = true;
+    else if (ch === ";") {
+      linha.push(campo);
+      campo = "";
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && t[i + 1] === "\n") i++;
+      linha.push(campo);
+      campo = "";
+      if (linha.some((c) => c.trim() !== "")) linhas.push(linha);
+      linha = [];
+    } else campo += ch;
+  }
+  linha.push(campo);
+  if (linha.some((c) => c.trim() !== "")) linhas.push(linha);
+  const [cabecalho = [], ...resto] = linhas;
+  return { cabecalho: cabecalho.map((c) => c.trim().toLowerCase()), linhas: resto };
+}
 
 // src/tools/exportacao.ts
 var COLUNAS_SERVICOS = [
@@ -39434,6 +39504,585 @@ function registerExportacao(server, hs) {
   );
 }
 
+// src/tools/lote.ts
+import { readFileSync as readFileSync3, realpathSync, statSync } from "node:fs";
+import { basename, dirname as dirname3, isAbsolute, relative, resolve } from "node:path";
+var MAX_ERROS_SEGUIDOS = 5;
+var OBRIGATORIAS = ["base", "id_cliente_servico", "sn"];
+var SIM = /^(s|sim|y|yes|true|1|x)$/i;
+var ADMINISTRATIVOS = /* @__PURE__ */ new Set(["OUTRA_BASE", "NAO_APROVADA", "ACIMA_DO_LIMITE", "TEMPO_ESGOTADO", "LOTE_INTERROMPIDO", "JA_VINCULADO"]);
+var COLUNAS_RESULTADO = [
+  "linha",
+  "base",
+  "id_cliente_servico",
+  "sn",
+  "aprovar",
+  "desvincular_antes",
+  "resultado",
+  "motivo",
+  "mensagem_api",
+  "cpe_desvinculada",
+  "olt_antes",
+  "interface_antes",
+  "cpes_antes",
+  "olt_depois",
+  "interface_depois",
+  "cpes_depois"
+];
+var num2 = (nome, padrao) => {
+  const v = Number(process.env[nome]);
+  return Number.isFinite(v) && v > 0 ? v : padrao;
+};
+function resolverArquivoLote(dir, arquivo) {
+  if (!/\.csv$/i.test(arquivo)) throw new Error("O arquivo do lote precisa ser .csv.");
+  let raiz;
+  try {
+    raiz = realpathSync.native(dir);
+  } catch {
+    throw new Error(`A pasta de lotes (HUBSOFT_LOTE_DIR) n\xE3o existe: ${dir}. Crie a pasta e coloque o CSV nela.`);
+  }
+  let real;
+  try {
+    real = realpathSync.native(resolve(raiz, arquivo));
+  } catch {
+    throw new Error(`Arquivo n\xE3o encontrado na pasta de lotes (HUBSOFT_LOTE_DIR = ${raiz}): ${arquivo}`);
+  }
+  const rel = relative(raiz, real);
+  if (!rel || rel.startsWith("..") || isAbsolute(rel)) {
+    throw new Error(`Recusado: o arquivo precisa estar dentro de HUBSOFT_LOTE_DIR (${raiz}).`);
+  }
+  if (!statSync(real).isFile()) throw new Error(`N\xE3o \xE9 um arquivo: ${arquivo}`);
+  return real;
+}
+function ehMac(phy, macServico) {
+  const bruto = String(phy ?? "").trim();
+  if (/^([0-9a-f]{2}[:-]){5}[0-9a-f]{2}$/i.test(bruto)) return true;
+  return Boolean(macServico) && normPhy(bruto) === macServico;
+}
+function msgApi(body) {
+  if (!body) return "";
+  const partes = [body.msg ?? body.message ?? body.error ?? body.raw ?? ""];
+  if (Array.isArray(body.errors)) partes.push(body.errors.join(" "));
+  else if (body.errors && typeof body.errors === "object") partes.push(Object.values(body.errors).flat().join(" "));
+  return mascararTexto(partes.filter(Boolean).join(" ").replace(/\s+/g, " ").trim()).slice(0, 300);
+}
+var juntarPhy = (cpes) => (cpes ?? []).map((c) => c?.phy_addr).filter(Boolean).join("|");
+async function lerServico2(hs, id, cont) {
+  const r = await obter(hs, `${API}/cliente`, { busca: "id_cliente_servico", termo_busca: id, relacoes: RELACOES }, cont);
+  if (!r.ok) return { erro: r.erro };
+  for (const c of r.body?.clientes ?? []) {
+    const sv = (c?.servicos ?? []).find((s) => Number(s?.id_cliente_servico) === id);
+    if (sv) return { servico: snapshotServico(sv) };
+  }
+  return { naoEncontrado: true };
+}
+async function lerCpe2(hs, sn, cont) {
+  const r = await obter(
+    hs,
+    `${API}/rede/cpe/todos`,
+    { pagina: 0, itens_por_pagina: 20, busca: "phy_addr", termo_busca: sn, somente_assinante_associado: "nao" },
+    cont
+  );
+  if (!r.ok) return { erro: r.erro };
+  const alvo = normPhy(sn);
+  return { encontradas: primeiraLista(r.body).filter((c) => normPhy(c?.phy_addr) === alvo).map(resumoCpe) };
+}
+async function postar(hs, path, corpo, passos, cont) {
+  await vez(hs.config.baseUrl);
+  cont.requisicoes++;
+  const r = await hs.raw("POST", path, { body: corpo });
+  if (r.status === 429) {
+    cont.esperas_429++;
+    pausar(hs.config.baseUrl, r.retryAfter ?? 1);
+  }
+  passos.push({ metodo: "POST", url: hs.config.baseUrl + path, corpo, http_status: r.status, resposta: r.body });
+  const msg = msgApi(r.body);
+  return {
+    ok: r.ok && r.body?.status !== "error",
+    status: r.status,
+    msg: r.status === 429 ? `HTTP 429 (limite de requisi\xE7\xF5es; n\xE3o repetido). ${msg}`.trim() : msg ? `HTTP ${r.status}: ${msg}` : `HTTP ${r.status}`,
+    bruto: msg
+  };
+}
+async function processarLinha(hs, l, confirmar2, arquivo, cont) {
+  const id = Number(l.id_cliente_servico);
+  const desvincular = SIM.test(l.desvincular_antes);
+  const definir = (resultado, motivo, mensagem = "") => {
+    l.resultado = resultado;
+    l.motivo = motivo;
+    if (mensagem) l.mensagem_api = mensagem;
+  };
+  const lido = await lerServico2(hs, id, cont);
+  if ("erro" in lido) return definir("ERRO", "FALHA_LEITURA_SERVICO", lido.erro);
+  if ("naoEncontrado" in lido) return definir("PULADO", "SERVICO_NAO_ENCONTRADO");
+  const sv = lido.servico;
+  const cpesSv = Array.isArray(sv.cpes) ? sv.cpes : [];
+  l.olt_antes = sv.equipamento_conexao?.nome ?? "";
+  l.interface_antes = sv.interface?.nome ?? "";
+  l.cpes_antes = juntarPhy(cpesSv);
+  if (sv.status_prefixo === "cancelado") return definir("PULADO", "SERVICO_CANCELADO");
+  const alvo = normPhy(l.sn);
+  if (cpesSv.some((c) => normPhy(c?.phy_addr) === alvo)) {
+    l.olt_depois = l.olt_antes;
+    l.interface_depois = l.interface_antes;
+    l.cpes_depois = l.cpes_antes;
+    return definir("PULADO", "JA_VINCULADO");
+  }
+  const cpe = await lerCpe2(hs, l.sn, cont);
+  if ("erro" in cpe) return definir("ERRO", "FALHA_LEITURA_CPE", cpe.erro);
+  if (!cpe.encontradas.length) return definir("PULADO", "SN_FORA_DO_INVENTARIO");
+  const outros = [...new Set(cpe.encontradas.flatMap((c) => c.servicos_vinculados).filter((x) => x !== id))];
+  if (outros.length) return definir("PULADO", "SN_EM_OUTRO_SERVICO", `SN vinculado ao(s) servi\xE7o(s) ${outros.join(", ")}`);
+  const antigas = cpesSv.filter((c) => !ehMac(c?.phy_addr, normPhy(sv.mac_addr)));
+  if (antigas.length > 1) {
+    return definir("PULADO", "VARIAS_CPES_VINCULADAS", `O servi\xE7o tem ${antigas.length} CPEs n\xE3o-MAC (${juntarPhy(antigas)}); trate manualmente.`);
+  }
+  const antiga = antigas[0]?.phy_addr;
+  if (antiga && !desvincular) {
+    return definir("PULADO", "OUTRA_CPE_VINCULADA", `O servi\xE7o j\xE1 tem a CPE ${antiga}; use desvincular_antes=S para troc\xE1-la.`);
+  }
+  if (!confirmar2) {
+    return definir(
+      "EXECUTARIA",
+      antiga ? "DESVINCULARIA_E_VINCULARIA" : "VINCULARIA",
+      antiga ? `desvincular ${antiga} \u2192 configurar_autenticacao(phy_addr=${l.sn}) \u2192 vincular_cpe` : `configurar_autenticacao(phy_addr=${l.sn}) \u2192 vincular_cpe`
+    );
+  }
+  const passos = [];
+  try {
+    if (antiga) {
+      const d = await postar(hs, `${API}/cliente/desvincular_cpe`, { id_cliente_servico: id, phy_addr: antiga }, passos, cont);
+      if (!d.ok) return definir("ERRO", "FALHA_DESVINCULAR", d.msg);
+      l.cpe_desvinculada = antiga;
+    }
+    const desfeita = antiga ? ` A CPE antiga ${antiga} J\xC1 FOI desvinculada.` : "";
+    const a = await postar(hs, `${API}/cliente/configurar_autenticacao`, { id_cliente_servico: id, phy_addr: l.sn }, passos, cont);
+    const semAlteracao = a.status === 422 && /n[ãa]o (é|e) necess[áa]ri/i.test(a.bruto);
+    if (!a.ok && !semAlteracao) return definir("ERRO", "FALHA_CONFIGURAR_AUTENTICACAO", a.msg + desfeita);
+    const v = await postar(hs, `${API}/cliente/vincular_cpe`, { id_cliente_servico: id }, passos, cont);
+    if (!v.ok) return definir("ERRO", "FALHA_VINCULAR", v.msg + desfeita);
+    const depois = await lerServico2(hs, id, cont);
+    if (!("servico" in depois)) return definir("ERRO", "FALHA_RELEITURA", "erro" in depois ? depois.erro : "servi\xE7o n\xE3o encontrado na releitura");
+    const sd = depois.servico;
+    l.olt_depois = sd.equipamento_conexao?.nome ?? "";
+    l.interface_depois = sd.interface?.nome ?? "";
+    l.cpes_depois = juntarPhy(sd.cpes);
+    const confirmado = (sd.cpes ?? []).some((c) => normPhy(c?.phy_addr) === alvo);
+    if (!confirmado) return definir("ERRO", "NAO_CONFIRMADO_NA_RELEITURA", `A releitura n\xE3o mostra o SN ${l.sn} entre as CPEs do servi\xE7o.`);
+    definir("OK", antiga ? "TROCADO" : "VINCULADO", v.bruto);
+    l._diff = diff(sv, sd);
+  } finally {
+    if (passos.length) {
+      auditar(hs, {
+        ferramenta: "hubsoft_vincular_lote",
+        lote: basename(arquivo),
+        linha: l.linha,
+        id_cliente_servico: id,
+        sn: l.sn,
+        resultado: l.resultado,
+        motivo: l.motivo,
+        passos,
+        estado_antes: sv,
+        ...l._diff ? { diff: l._diff } : {}
+      });
+    }
+  }
+}
+function registerLote(server, hs) {
+  if (hs.config.readOnly) return;
+  server.registerTool(
+    "hubsoft_vincular_lote",
+    {
+      title: "Vincular CPEs em lote (CSV)",
+      description: "ESCRITA. Vincula em lote ONUs j\xE1 autorizadas na OLT aos servi\xE7os, lendo um CSV (';', UTF-8) da pasta HUBSOFT_LOTE_DIR (caminhos fora dela s\xE3o recusados). Colunas: base, id_cliente_servico, sn; opcionais aprovar e desvincular_antes (S/N). Processa s\xF3 as linhas da base em `servidor`, uma por vez: leitura pr\xE9via, [desvincular a CPE antiga], configurar_autenticacao(phy_addr=sn), vincular_cpe e releitura. Pula servi\xE7o cancelado, SN fora do invent\xE1rio, SN em outro servi\xE7o, servi\xE7o j\xE1 com este SN (JA_VINCULADO) e servi\xE7o com outra CPE n\xE3o-MAC sem desvincular_antes=S. confirmar=false (padr\xE3o) s\xF3 classifica, sem enviar nada. Para ap\xF3s 5 erros seguidos; se o tempo acabar, para entre linhas e informa retomar_a_partir_da_linha. Grava <arquivo>_resultado_<data>.csv (ou _simulacao_) ao lado do arquivo e devolve s\xF3 o resumo.",
+      inputSchema: {
+        arquivo: external_exports.string().min(1).describe("Nome do CSV dentro de HUBSOFT_LOTE_DIR (pode ter subpasta)."),
+        confirmar: external_exports.boolean().optional().describe("false (padr\xE3o) = s\xF3 classifica as linhas. true = executa."),
+        limite: external_exports.number().int().min(1).max(300).optional().describe("M\xE1ximo de linhas processadas nesta chamada (padr\xE3o 50, m\xE1x. 300)."),
+        so_aprovadas: external_exports.boolean().optional().describe("true (padr\xE3o) = s\xF3 linhas com aprovar=S."),
+        a_partir_da_linha: external_exports.number().int().min(2).optional().describe("Retomar a partir desta linha do arquivo (2 = primeira linha de dados).")
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true }
+    },
+    async (args) => {
+      try {
+        const inicio = Date.now();
+        const prazo = inicio + num2("HUBSOFT_LOTE_TEMPO_MAX_S", 55) * 1e3;
+        const confirmar2 = args.confirmar === true;
+        const limite = args.limite ?? 50;
+        const soAprovadas = args.so_aprovadas !== false;
+        const aPartir = args.a_partir_da_linha ?? 2;
+        const base = hs.config.nome;
+        const caminho = resolverArquivoLote(hs.config.loteDir, args.arquivo);
+        const { cabecalho, linhas: brutas } = lerCsv(readFileSync3(caminho, "utf8"));
+        const faltam = OBRIGATORIAS.filter((c) => !cabecalho.includes(c));
+        if (faltam.length) throw new Error(`Colunas obrigat\xF3rias ausentes no CSV: ${faltam.join(", ")} (separador ';').`);
+        const col = (cells, nome) => {
+          const i = cabecalho.indexOf(nome);
+          return i < 0 ? "" : String(cells[i] ?? "").trim();
+        };
+        const linhas = brutas.map((cells, i) => ({
+          linha: i + 2,
+          base: col(cells, "base"),
+          id_cliente_servico: col(cells, "id_cliente_servico"),
+          sn: col(cells, "sn"),
+          aprovar: col(cells, "aprovar"),
+          desvincular_antes: col(cells, "desvincular_antes")
+        })).filter((l) => l.linha >= aPartir);
+        const cont = { requisicoes: 0, esperas_429: 0, novas_tentativas: 0 };
+        const vistosId = /* @__PURE__ */ new Set();
+        const vistosSn = /* @__PURE__ */ new Set();
+        let processadas = 0;
+        let seguidos = 0;
+        let interrompido;
+        let retomar;
+        for (const l of linhas) {
+          const pular = (motivo, mensagem = "") => {
+            l.resultado = "PULADO";
+            l.motivo = motivo;
+            if (mensagem) l.mensagem_api = mensagem;
+          };
+          if (l.base.toLowerCase() !== base.toLowerCase()) {
+            pular("OUTRA_BASE");
+            continue;
+          }
+          if (soAprovadas && !SIM.test(l.aprovar)) {
+            pular("NAO_APROVADA");
+            continue;
+          }
+          if (!/^\d+$/.test(l.id_cliente_servico) || Number(l.id_cliente_servico) <= 0 || !/^\S{5,}$/.test(l.sn)) {
+            pular("DADOS_INVALIDOS", "id_cliente_servico precisa ser inteiro positivo e sn ter 5+ caracteres sem espa\xE7os");
+            continue;
+          }
+          const chaveSn = normPhy(l.sn);
+          if (vistosId.has(l.id_cliente_servico) || vistosSn.has(chaveSn)) {
+            pular("DUPLICADO_NO_ARQUIVO");
+            continue;
+          }
+          vistosId.add(l.id_cliente_servico);
+          vistosSn.add(chaveSn);
+          if (interrompido) {
+            pular("LOTE_INTERROMPIDO");
+            retomar ??= l.linha;
+            continue;
+          }
+          if (processadas >= limite) {
+            pular("ACIMA_DO_LIMITE");
+            retomar ??= l.linha;
+            continue;
+          }
+          if (Date.now() > prazo) {
+            pular("TEMPO_ESGOTADO");
+            retomar ??= l.linha;
+            continue;
+          }
+          processadas++;
+          try {
+            await processarLinha(hs, l, confirmar2, caminho, cont);
+          } catch (e) {
+            l.resultado = "ERRO";
+            if (e instanceof HubsoftError) {
+              l.motivo = "AUTENTICACAO";
+              interrompido = `falha de autentica\xE7\xE3o: ${mascararTexto(e.message).slice(0, 200)}`;
+            } else l.motivo = "EXCECAO";
+            l.mensagem_api = mascararTexto(e.message ?? String(e)).slice(0, 300);
+          }
+          seguidos = l.resultado === "ERRO" ? seguidos + 1 : 0;
+          if (seguidos >= MAX_ERROS_SEGUIDOS && !interrompido) interrompido = `${MAX_ERROS_SEGUIDOS} erros seguidos`;
+        }
+        const nomeEntrada = basename(caminho).replace(/\.csv$/i, "");
+        const arquivoResultado = gravarCsvNome(
+          dirname3(caminho),
+          `${nomeEntrada}_${confirmar2 ? "resultado" : "simulacao"}_${carimbo()}`,
+          COLUNAS_RESULTADO,
+          linhas
+        );
+        const contagem = {};
+        const porMotivo = {};
+        for (const l of linhas) {
+          contagem[l.resultado] = (contagem[l.resultado] ?? 0) + 1;
+          porMotivo[l.motivo] = (porMotivo[l.motivo] ?? 0) + 1;
+        }
+        const falhas = linhas.filter((l) => (l.resultado === "ERRO" || l.resultado === "PULADO") && !ADMINISTRATIVOS.has(l.motivo)).sort((a, b) => Number(b.resultado === "ERRO") - Number(a.resultado === "ERRO") || a.linha - b.linha).slice(0, 10).map((l) => ({
+          linha: l.linha,
+          id_cliente_servico: Number(l.id_cliente_servico) || l.id_cliente_servico,
+          sn: l.sn,
+          resultado: l.resultado,
+          motivo: l.motivo,
+          ...l.mensagem_api ? { mensagem: l.mensagem_api.slice(0, 200) } : {}
+        }));
+        return responder(hs, {
+          modo: confirmar2 ? "execucao" : "simulacao",
+          ...confirmar2 ? {} : { nada_foi_enviado: true },
+          arquivo_entrada: caminho,
+          arquivo_resultado: arquivoResultado,
+          linhas_lidas: linhas.length,
+          processadas,
+          contagem,
+          por_motivo: porMotivo,
+          ...interrompido ? { interrompido } : {},
+          ...retomar !== void 0 ? { retomar_a_partir_da_linha: retomar } : {},
+          tempo_s: segundos(inicio),
+          ...cont.esperas_429 ? { esperas_429: cont.esperas_429 } : {},
+          primeiras_falhas: falhas,
+          ...confirmar2 ? {} : { para_executar: "Revise o CSV de simula\xE7\xE3o e repita com confirmar=true." }
+        });
+      } catch (e) {
+        return fail(e);
+      }
+    }
+  );
+}
+
+// src/tools/equipamento.ts
+import { readdirSync, readFileSync as readFileSync4, statSync as statSync2 } from "node:fs";
+import { join as join4 } from "node:path";
+var ROTA_EQUIPAMENTO = "/api/v1/rede/equipamento_conexao";
+var IDADE_MAX_EXPORTACAO_H = 24;
+function extrairEquipamento(body) {
+  if (!body || typeof body !== "object") return void 0;
+  if ("nome" in body || "ipv4" in body) return body;
+  for (const k of ["equipamento_conexao", "equipamento", "data", "dados"]) {
+    const v = body[k];
+    if (v && typeof v === "object" && !Array.isArray(v)) return extrairEquipamento(v) ?? v;
+  }
+  return void 0;
+}
+function resumoEquipamento(e) {
+  if (!e) return null;
+  const ifs = e.interfaces ?? e.interfaces_conexao ?? e.interface_conexao;
+  return {
+    id_equipamento: e.id_equipamento_conexao ?? e.id_equipamento ?? e.id ?? null,
+    nome: e.nome ?? null,
+    ipv4: e.ipv4 ?? null,
+    tipo: e.tipo ?? e.tipo_equipamento?.descricao ?? null,
+    deleted_at: e.deleted_at ?? null,
+    ativo: !e.deleted_at,
+    qtd_interfaces: Array.isArray(ifs) ? ifs.length : null
+  };
+}
+async function lerEquipamento(hs, id) {
+  await vez(hs.config.baseUrl);
+  const r = await hs.raw("GET", `${ROTA_EQUIPAMENTO}/${id}`);
+  if (r.status === 429) pausar(hs.config.baseUrl, r.retryAfter ?? 1);
+  const eq = r.ok ? extrairEquipamento(r.body) : void 0;
+  return { http_status: r.status, encontrado: Boolean(eq), equipamento: resumoEquipamento(eq), ...r.ok ? {} : { resposta: r.body } };
+}
+var igual = (a, b) => String(a ?? "").trim().toUpperCase() === String(b ?? "").trim().toUpperCase();
+function contarPelaExportacao(hs, nome, ipv43) {
+  let arquivos = [];
+  try {
+    const pref = `servicos_${hs.config.nome}_`;
+    arquivos = readdirSync(hs.config.exportDir).filter((f) => f.startsWith(pref) && f.endsWith(".csv") && !f.includes("_parcial")).map((f) => ({ arquivo: join4(hs.config.exportDir, f), mtime: statSync2(join4(hs.config.exportDir, f)).mtimeMs })).sort((a, b) => b.mtime - a.mtime);
+  } catch {
+    return void 0;
+  }
+  const ultimo = arquivos[0];
+  if (!ultimo || Date.now() - ultimo.mtime > IDADE_MAX_EXPORTACAO_H * 36e5) return void 0;
+  const { cabecalho, linhas } = lerCsv(readFileSync4(ultimo.arquivo, "utf8"));
+  const iNome = cabecalho.indexOf("equipamento_conexao_nome");
+  const iIp = cabecalho.indexOf("equipamento_conexao_ip");
+  if (iNome < 0) return void 0;
+  const n = linhas.filter((c) => igual(c[iNome], nome) && (!ipv43 || iIp < 0 || !c[iIp] || igual(c[iIp], ipv43))).length;
+  return { servicos_vinculados: n, fonte: "exportacao", arquivo: ultimo.arquivo, data_arquivo: new Date(ultimo.mtime).toISOString() };
+}
+async function contarPelaApi(hs, nome, ipv43, prazo) {
+  let n = 0;
+  const r = await paginar({
+    hs,
+    rota: `${API}/cliente/todos`,
+    query: { itens_por_pagina: 500, cancelado: "nao", relacoes: "equipamento_conexao" },
+    chave: "clientes",
+    prazo,
+    aoLer: (lote) => {
+      for (const c of lote)
+        for (const s of c?.servicos ?? []) {
+          const e = s?.equipamento_conexao;
+          if (s?.status_prefixo === "cancelado" || !e) continue;
+          if (igual(e.nome, nome) && (!ipv43 || !e.ipv4 || igual(e.ipv4, ipv43))) n++;
+        }
+    }
+  });
+  const completo = r.pagina_falhou === void 0 && !r.erros.length;
+  return completo ? { servicos_vinculados: n, fonte: "api", paginas_lidas: r.paginas_lidas } : { servicos_vinculados: null, fonte: "api", paginas_lidas: r.paginas_lidas, incompleta: true, minimo_encontrado: n, erros: r.erros };
+}
+function registerEquipamento(server, hs) {
+  if (hs.config.readOnly) return;
+  const comum = {
+    id_equipamento: external_exports.number().int().positive().describe("id do equipamento de conex\xE3o (id_equipamento em rede/equipamento)."),
+    confirmar: external_exports.boolean().optional().describe("false (padr\xE3o) = s\xF3 simula. true = executa."),
+    confirmar_nome: external_exports.string().optional().describe("Obrigat\xF3rio para executar: o nome ATUAL do equipamento, exatamente.")
+  };
+  const aviso = "Rota interna do Hubsoft, n\xE3o documentada (fora de /api/v1/integracao): pode mudar sem aviso.";
+  server.registerTool(
+    "hubsoft_equipamento_inativar",
+    {
+      title: "Inativar equipamento de conex\xE3o (rota interna)",
+      description: "ESCRITA, DESTRUTIVA. Inativa (soft delete: preenche deleted_at) um equipamento de conex\xE3o (OLT, BNG\u2026) por DELETE /api/v1/rede/equipamento_conexao/{id} \u2014 ROTA INTERNA N\xC3O DOCUMENTADA, pode mudar. Antes l\xEA o equipamento (nome, ipv4, deleted_at, n\xBA de interfaces) e conta os servi\xE7os n\xE3o cancelados ligados a ele (\xFAltima exporta\xE7\xE3o de servi\xE7os da base com at\xE9 24 h, ou varredura de cliente/todos). Recusa se houver servi\xE7os vinculados ou se a contagem n\xE3o terminar, salvo forcar=true. Para executar: confirmar=true e confirmar_nome igual ao nome atual. Reverte com hubsoft_equipamento_reativar. Exige uma \xFAnica base em `servidor`.",
+      inputSchema: {
+        ...comum,
+        forcar: external_exports.boolean().optional().describe("Inativa mesmo com servi\xE7os vinculados (ou contagem incompleta)."),
+        fonte_contagem: external_exports.enum(["auto", "api", "exportacao"]).optional().describe("auto (padr\xE3o): exporta\xE7\xE3o recente, sen\xE3o API.")
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true }
+    },
+    async ({ id_equipamento, confirmar: confirmar2, confirmar_nome, forcar, fonte_contagem }) => {
+      try {
+        const inicio = Date.now();
+        const antes = await lerEquipamento(hs, id_equipamento);
+        const eq = antes.equipamento;
+        const bloqueios = [];
+        let contagem;
+        if (!antes.encontrado) bloqueios.push(`Equipamento ${id_equipamento} n\xE3o encontrado ou inacess\xEDvel (HTTP ${antes.http_status}).`);
+        else if (eq?.deleted_at) bloqueios.push(`O equipamento j\xE1 est\xE1 inativo (deleted_at = ${eq.deleted_at}).`);
+        else {
+          const fonte = fonte_contagem ?? "auto";
+          if (fonte !== "api") contagem = contarPelaExportacao(hs, eq.nome, eq.ipv4);
+          if (!contagem && fonte === "exportacao") {
+            contagem = { servicos_vinculados: null, fonte: "exportacao", incompleta: true, erro: `Sem exporta\xE7\xE3o completa de servi\xE7os desta base com at\xE9 ${IDADE_MAX_EXPORTACAO_H} h. Rode hubsoft_exportar_servicos ou use fonte_contagem=api.` };
+          }
+          if (!contagem) contagem = await contarPelaApi(hs, eq.nome, eq.ipv4, inicio + 45e3);
+          if (contagem.servicos_vinculados === null && !forcar) {
+            bloqueios.push("N\xE3o foi poss\xEDvel contar todos os servi\xE7os ligados ao equipamento. Rode hubsoft_exportar_servicos e tente de novo, ou use forcar=true.");
+          } else if (contagem.servicos_vinculados > 0 && !forcar) {
+            bloqueios.push(`H\xE1 ${contagem.servicos_vinculados} servi\xE7o(s) n\xE3o cancelado(s) ligados a este equipamento. Migre-os antes ou use forcar=true.`);
+          }
+        }
+        if (confirmar2 && eq && !bloqueios.length && confirmar_nome?.trim() !== String(eq.nome ?? "").trim()) {
+          bloqueios.push(`confirmar_nome precisa ser exatamente o nome atual: "${eq.nome}".`);
+        }
+        const requisicao = { metodo: "DELETE", url: `${hs.config.baseUrl}${ROTA_EQUIPAMENTO}/${id_equipamento}` };
+        if (!confirmar2 || bloqueios.length) {
+          return responder(
+            hs,
+            {
+              modo: "simulacao",
+              nada_foi_enviado: true,
+              ...bloqueios.length ? { bloqueado: bloqueios } : {},
+              requisicao_que_seria_enviada: requisicao,
+              estado_atual: antes,
+              ...contagem ? { contagem_servicos: contagem } : {},
+              efeito_esperado: "Soft delete: o equipamento some das listas (deleted_at preenchido); reverte com hubsoft_equipamento_reativar.",
+              aviso,
+              ...bloqueios.length ? {} : { para_executar: `Confirme com o usu\xE1rio e repita com confirmar=true e confirmar_nome="${eq?.nome}".` }
+            },
+            Boolean(confirmar2 && bloqueios.length)
+          );
+        }
+        await vez(hs.config.baseUrl);
+        const r = await hs.raw("DELETE", `${ROTA_EQUIPAMENTO}/${id_equipamento}`);
+        const sucesso = r.ok && r.body?.status !== "error";
+        const depois = await lerEquipamento(hs, id_equipamento);
+        const mudancas = diff(antes, depois);
+        const registro = {
+          ferramenta: "hubsoft_equipamento_inativar",
+          metodo: "DELETE",
+          url: requisicao.url,
+          http_status: r.status,
+          resposta: r.body,
+          forcar: Boolean(forcar),
+          contagem_servicos: contagem,
+          diff: mudancas
+        };
+        auditar(hs, registro);
+        return responder(
+          hs,
+          {
+            modo: "execucao",
+            requisicao_enviada: requisicao,
+            resultado: { http_status: r.status, sucesso, resposta: r.body, ...r.status === 429 ? { retry_after: r.retryAfter, observacao: "N\xE3o foi repetido." } : {} },
+            estado_antes: antes,
+            estado_depois: depois,
+            diff: mudancas,
+            contagem_servicos: contagem,
+            aviso,
+            ...sucesso ? { reverter: { ferramenta: "hubsoft_equipamento_reativar", argumentos: { servidor: hs.config.nome, id_equipamento, confirmar: true, confirmar_nome: eq.nome } } } : {},
+            ...registro.aviso_auditoria ? { aviso_auditoria: registro.aviso_auditoria } : {}
+          },
+          !sucesso
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    }
+  );
+  server.registerTool(
+    "hubsoft_equipamento_reativar",
+    {
+      title: "Reativar equipamento de conex\xE3o (rota interna)",
+      description: "ESCRITA. Reativa (restore do soft delete) um equipamento de conex\xE3o inativado, por GET /api/v1/rede/equipamento_conexao/{id}/restore \u2014 ROTA INTERNA N\xC3O DOCUMENTADA, pode mudar; \xE9 um GET que altera dados, por isso nunca \xE9 repetido. Para executar: confirmar=true e confirmar_nome igual ao nome do equipamento. Se a leitura pr\xE9via n\xE3o enxergar o equipamento inativo, o nome \xE9 conferido na releitura e uma diverg\xEAncia \xE9 apontada. Exige uma \xFAnica base em `servidor`.",
+      inputSchema: comum,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true }
+    },
+    async ({ id_equipamento, confirmar: confirmar2, confirmar_nome }) => {
+      try {
+        const antes = await lerEquipamento(hs, id_equipamento);
+        const eq = antes.equipamento;
+        const bloqueios = [];
+        const avisos = [aviso];
+        if (antes.encontrado && eq && !eq.deleted_at) bloqueios.push("O equipamento j\xE1 est\xE1 ativo (deleted_at vazio).");
+        if (!antes.encontrado) avisos.push(`A leitura pr\xE9via n\xE3o encontrou o equipamento (HTTP ${antes.http_status}); comum quando est\xE1 inativo. O nome ser\xE1 conferido depois da reativa\xE7\xE3o.`);
+        if (confirmar2 && !confirmar_nome?.trim()) bloqueios.push("Informe confirmar_nome com o nome do equipamento.");
+        if (confirmar2 && eq && antes.encontrado && confirmar_nome?.trim() !== String(eq.nome ?? "").trim()) {
+          bloqueios.push(`confirmar_nome precisa ser exatamente o nome atual: "${eq.nome}".`);
+        }
+        const requisicao = { metodo: "GET", url: `${hs.config.baseUrl}${ROTA_EQUIPAMENTO}/${id_equipamento}/restore` };
+        if (!confirmar2 || bloqueios.length) {
+          return responder(
+            hs,
+            {
+              modo: "simulacao",
+              nada_foi_enviado: true,
+              ...bloqueios.length ? { bloqueado: bloqueios } : {},
+              requisicao_que_seria_enviada: requisicao,
+              estado_atual: antes,
+              efeito_esperado: "Limpa deleted_at: o equipamento volta \xE0s listas e pode receber servi\xE7os.",
+              avisos,
+              ...bloqueios.length ? {} : { para_executar: "Confirme com o usu\xE1rio e repita com confirmar=true e confirmar_nome." }
+            },
+            Boolean(confirmar2 && bloqueios.length)
+          );
+        }
+        await vez(hs.config.baseUrl);
+        const r = await hs.raw("GET", `${ROTA_EQUIPAMENTO}/${id_equipamento}/restore`);
+        const sucesso = r.ok && r.body?.status !== "error";
+        const depois = await lerEquipamento(hs, id_equipamento);
+        const mudancas = diff(antes, depois);
+        const nomeDepois = depois.equipamento?.nome;
+        if (sucesso && nomeDepois && confirmar_nome?.trim() !== String(nomeDepois).trim()) {
+          avisos.push(`ATEN\xC7\xC3O: o equipamento reativado se chama "${nomeDepois}", diferente de confirmar_nome. Se foi engano, inative-o de novo com hubsoft_equipamento_inativar.`);
+        }
+        const registro = {
+          ferramenta: "hubsoft_equipamento_reativar",
+          metodo: "GET",
+          url: requisicao.url,
+          http_status: r.status,
+          resposta: r.body,
+          confirmar_nome,
+          diff: mudancas
+        };
+        auditar(hs, registro);
+        return responder(
+          hs,
+          {
+            modo: "execucao",
+            requisicao_enviada: requisicao,
+            resultado: { http_status: r.status, sucesso, resposta: r.body, ...r.status === 429 ? { retry_after: r.retryAfter, observacao: "N\xE3o foi repetido." } : {} },
+            estado_antes: antes,
+            estado_depois: depois,
+            diff: mudancas,
+            avisos,
+            ...registro.aviso_auditoria ? { aviso_auditoria: registro.aviso_auditoria } : {}
+          },
+          !sucesso
+        );
+      } catch (e) {
+        return fail(e);
+      }
+    }
+  );
+}
+
 // src/registry.ts
 function collectTools(hs) {
   const defs = [];
@@ -39452,11 +40101,13 @@ function collectTools(hs) {
   registerCpe(collector, hs);
   registerGraphql(collector, hs);
   registerExportacao(collector, hs);
+  registerLote(collector, hs);
+  registerEquipamento(collector, hs);
   return defs;
 }
 
 // src/version.ts
-var VERSION = "0.11.0";
+var VERSION = "0.12.0";
 
 // src/multi.ts
 function diagnosticoVariaveis() {
@@ -39703,7 +40354,7 @@ function collectMultiTools(servers) {
 }
 
 // src/index.ts
-var INSTRUCTIONS = "Ferramentas para o ERP Hubsoft (provedores de internet). As chamadas usam o login do pr\xF3prio usu\xE1rio, ent\xE3o o acesso segue as permiss\xF5es dele no Hubsoft. Para perguntas sobre um cliente, comece por hubsoft_situacao_cliente (CPF/CNPJ ou c\xF3digo). Para listas de clientes bloqueados/suspensos ou por qualquer status de servi\xE7o, use hubsoft_servicos_por_status (filtra no servidor; n\xE3o varra a base). Para totais de um per\xEDodo (faturamento, recebimentos, inadimpl\xEAncia por m\xEAs), use hubsoft_resumo_financeiro, que pagina e soma no servidor; nunca pagine faturas para somar. Para clientes com cadastro ativo e sem servi\xE7o ativo, use hubsoft_clientes_ativos_sem_servico_ativo (varre a base no servidor); nunca pagine clientes manualmente. Para buscas por nome, login ou outros campos use hubsoft_buscar_cliente. Para relat\xF3rios por per\xEDodo, POPs, CPEs/ONUs, notas fiscais e sess\xF5es RADIUS, use as ferramentas GraphQL (hubsoft_graphql_consultas \u2192 hubsoft_graphql_tipo \u2192 hubsoft_graphql). Faturas com status 'aguardando' e vencimento futuro (ex.: parcelas de carn\xEA) n\xE3o est\xE3o vencidas. Para exportar a base inteira (servi\xE7os, CPEs, equipamentos/POPs) para planilha, use hubsoft_exportar_* com servidor de UMA base: elas gravam um CSV e devolvem s\xF3 o resumo; n\xE3o pagine para montar planilhas. Senhas (ex.: PPPoE) s\xE3o mascaradas por padr\xE3o. Dados de clientes s\xE3o pessoais (LGPD): mostre apenas o necess\xE1rio. Quando o login exige 2FA, o pr\xF3prio MCP abre uma p\xE1gina no navegador para o usu\xE1rio digitar o c\xF3digo. Se a resposta disser 'Login 2FA pendente', mostre o link ao usu\xE1rio e repita a consulta depois que ele conectar. S\xF3 se isso n\xE3o for poss\xEDvel, pe\xE7a o c\xF3digo e chame hubsoft_conectar; nunca invente um c\xF3digo. O token fica salvo, ent\xE3o isso s\xF3 \xE9 preciso no primeiro acesso. Antes de qualquer a\xE7\xE3o que altere dados, confirme cliente e servi\xE7o com o usu\xE1rio. Ferramentas de escrita/controle de CPE (configurar_autenticacao, vincular/desvincular_cpe, reiniciar/restaurar_cpe, cpe_gerenciar) exigem servidor com UMA base e come\xE7am SEMPRE em simula\xE7\xE3o (confirmar=false): mostre ao usu\xE1rio o estado atual, a requisi\xE7\xE3o e o efeito, e s\xF3 repita com confirmar=true depois de ele aprovar explicitamente. Depois de executar, mostre o diff antes/depois.";
+var INSTRUCTIONS = "Ferramentas para o ERP Hubsoft (provedores de internet). As chamadas usam o login do pr\xF3prio usu\xE1rio, ent\xE3o o acesso segue as permiss\xF5es dele no Hubsoft. Para perguntas sobre um cliente, comece por hubsoft_situacao_cliente (CPF/CNPJ ou c\xF3digo). Para listas de clientes bloqueados/suspensos ou por qualquer status de servi\xE7o, use hubsoft_servicos_por_status (filtra no servidor; n\xE3o varra a base). Para totais de um per\xEDodo (faturamento, recebimentos, inadimpl\xEAncia por m\xEAs), use hubsoft_resumo_financeiro, que pagina e soma no servidor; nunca pagine faturas para somar. Para clientes com cadastro ativo e sem servi\xE7o ativo, use hubsoft_clientes_ativos_sem_servico_ativo (varre a base no servidor); nunca pagine clientes manualmente. Para buscas por nome, login ou outros campos use hubsoft_buscar_cliente. Para relat\xF3rios por per\xEDodo, POPs, CPEs/ONUs, notas fiscais e sess\xF5es RADIUS, use as ferramentas GraphQL (hubsoft_graphql_consultas \u2192 hubsoft_graphql_tipo \u2192 hubsoft_graphql). Faturas com status 'aguardando' e vencimento futuro (ex.: parcelas de carn\xEA) n\xE3o est\xE3o vencidas. Para exportar a base inteira (servi\xE7os, CPEs, equipamentos/POPs) para planilha, use hubsoft_exportar_* com servidor de UMA base: elas gravam um CSV e devolvem s\xF3 o resumo; n\xE3o pagine para montar planilhas. Senhas (ex.: PPPoE) s\xE3o mascaradas por padr\xE3o e CPF/CNPJ sempre saem mascarados (3 \xFAltimos d\xEDgitos). V\xEDnculo em lote: hubsoft_vincular_lote com um CSV de HUBSOFT_LOTE_DIR, sempre simulando antes (confirmar=false). hubsoft_equipamento_inativar/reativar usam rotas internas n\xE3o documentadas. Dados de clientes s\xE3o pessoais (LGPD): mostre apenas o necess\xE1rio. Quando o login exige 2FA, o pr\xF3prio MCP abre uma p\xE1gina no navegador para o usu\xE1rio digitar o c\xF3digo. Se a resposta disser 'Login 2FA pendente', mostre o link ao usu\xE1rio e repita a consulta depois que ele conectar. S\xF3 se isso n\xE3o for poss\xEDvel, pe\xE7a o c\xF3digo e chame hubsoft_conectar; nunca invente um c\xF3digo. O token fica salvo, ent\xE3o isso s\xF3 \xE9 preciso no primeiro acesso. Antes de qualquer a\xE7\xE3o que altere dados, confirme cliente e servi\xE7o com o usu\xE1rio. Ferramentas de escrita/controle de CPE (configurar_autenticacao, vincular/desvincular_cpe, reiniciar/restaurar_cpe, cpe_gerenciar) exigem servidor com UMA base e come\xE7am SEMPRE em simula\xE7\xE3o (confirmar=false): mostre ao usu\xE1rio o estado atual, a requisi\xE7\xE3o e o efeito, e s\xF3 repita com confirmar=true depois de ele aprovar explicitamente. Depois de executar, mostre o diff antes/depois.";
 async function main() {
   const servers = loadServers();
   const cfg = servers[0];

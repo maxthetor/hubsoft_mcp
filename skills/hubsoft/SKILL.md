@@ -69,7 +69,7 @@ Quando o login exige 2FA, o próprio MCP abre uma página no navegador (a CLI pe
 
 ## Ações que alteram dados
 
-Só existem com `HUBSOFT_PERMITIR_ESCRITA=true`: `desbloqueio_confianca`, `enviar_fatura_email` e as ferramentas de CPE (`configurar_autenticacao`, `vincular_cpe`, `desvincular_cpe`, `reiniciar_cpe`, `restaurar_cpe`, `cpe_gerenciar`). Fluxo obrigatório:
+Só existem com `HUBSOFT_PERMITIR_ESCRITA=true`: `desbloqueio_confianca`, `enviar_fatura_email` e as ferramentas de CPE (`configurar_autenticacao`, `vincular_cpe`, `desvincular_cpe`, `reiniciar_cpe`, `restaurar_cpe`, `cpe_gerenciar`), `vincular_lote` e `equipamento_inativar`/`equipamento_reativar`. Fluxo obrigatório:
 
 1. Passe `servidor` com **uma** base: a base onde o cliente foi encontrado.
 2. Chame **sem** `confirmar`, que é a simulação. Mostre ao usuário o estado atual, a requisição, o efeito esperado e os avisos (CPE vinculada a outro serviço, `phy_addr` fora do inventário, serviço cancelado, rollback).
@@ -78,9 +78,14 @@ Só existem com `HUBSOFT_PERMITIR_ESCRITA=true`: `desbloqueio_confianca`, `envia
 
 Vincular ONU já autorizada sem desprovisionar: `configurar_autenticacao` (phy_addr e, se preciso, `id_interface_conexao`), depois `vincular_cpe`. O Hubsoft preenche OLT, PON e roteamento sozinho; confira no diff. `restaurar_cpe` apaga PPPoE e Wi-Fi da CPE e exige `confirmar_phy_addr`. Para Wi-Fi, leia antes com `cpe_iniciar_gerenciamento` e use os mesmos prefixos em `cpe_gerenciar`.
 
+Vínculo em lote: o usuário coloca o CSV (`base;id_cliente_servico;sn;aprovar;desvincular_antes`) em `HUBSOFT_LOTE_DIR`. Rode `vincular_lote` primeiro com `confirmar=false`, mostre a contagem por motivo e só depois `confirmar=true`. Se vier `retomar_a_partir_da_linha`, repita com `a_partir_da_linha`. Não abra os CSV de resultado na conversa; informe o caminho.
+
+`equipamento_inativar`/`equipamento_reativar` usam rotas internas não documentadas (podem mudar): simule, confira a contagem de serviços ligados e peça ao usuário o nome exato para `confirmar_nome`. Não use `forcar=true` sem pedido explícito.
+
 ## Privacidade (LGPD)
 
 - Mostre só os dados pessoais necessários para a pergunta. Em listas, prefira nome, código e status.
 - Senhas (ex.: PPPoE) vêm mascaradas (`***`). Não tente obtê-las por outro caminho.
+- CPF/CNPJ vêm mascarados (só os 3 últimos dígitos). Não tente reconstruí-los nem pedir o número completo à API por outro caminho.
 - Não copie dados de clientes para arquivos, planilhas ou mensagens sem pedido explícito do usuário.
 - As exportações CSV só rodam com pedido explícito e já excluem CPF/CNPJ, RG, telefones, e-mails, endereços e senhas. Não abra o CSV para mostrar os dados na conversa; informe o caminho do arquivo.

@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { HubsoftError, type HubsoftClient } from "./client.js";
+import { mascararTexto } from "./util.js";
 
 /**
  * Base das ferramentas de exportação (somente GET).
@@ -35,7 +36,7 @@ const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * Espera a vez de enviar uma requisição a esta base (compartilhado entre chamadas paralelas).
  * Usa 90% do limite: a latência da rede pode aproximar as chegadas no Hubsoft.
  */
-async function vez(base: string) {
+export async function vez(base: string) {
   const intervalo = 1000 / (num("HUBSOFT_EXPORT_REQ_S", 20) * 0.9);
   const l = limites.get(base) ?? { proximo: 0, pausadoAte: 0 };
   limites.set(base, l);
@@ -45,7 +46,7 @@ async function vez(base: string) {
   if (quando > agora) await dormir(quando - agora);
 }
 
-function pausar(base: string, segundos: number) {
+export function pausar(base: string, segundos: number) {
   const l = limites.get(base) ?? { proximo: 0, pausadoAte: 0 };
   l.pausadoAte = Math.max(l.pausadoAte, Date.now() + Math.min(segundos, MAX_ESPERA_S) * 1000);
   limites.set(base, l);
@@ -115,6 +116,8 @@ export interface ResultadoPaginacao extends Contadores {
   ultima_pagina?: number;
   /** Página que falhou (as anteriores foram lidas; dela em diante, não). */
   pagina_falhou?: number;
+  /** Parou por tempo (prazoMs) antes da última página. */
+  tempo_esgotado?: boolean;
   erros: string[];
 }
 
@@ -131,6 +134,8 @@ export async function paginar(opts: {
   paginaInicial?: number;
   aoLer: (itens: any[]) => void;
   progresso?: (lidas: number, total?: number) => void;
+  /** Prazo absoluto (Date.now()) para não começar novos lotes de páginas. */
+  prazo?: number;
 }): Promise<ResultadoPaginacao> {
   const paralelo = Math.min(10, Math.floor(num("HUBSOFT_EXPORT_PARALELO", 4)));
   const res: ResultadoPaginacao = { paginas_lidas: 0, requisicoes: 0, esperas_429: 0, novas_tentativas: 0, erros: [] };
@@ -154,6 +159,12 @@ export async function paginar(opts: {
   opts.progresso?.(res.paginas_lidas, total);
 
   for (let p = inicio + 1; p <= ultima; p += paralelo) {
+    if (opts.prazo && Date.now() > opts.prazo) {
+      res.tempo_esgotado = true;
+      res.pagina_falhou = p;
+      res.erros.push(`tempo esgotado antes da página ${p}`);
+      return res;
+    }
     const nums = Array.from({ length: Math.min(paralelo, ultima - p + 1) }, (_, i) => p + i);
     const lote = await Promise.all(nums.map(ler));
     for (let i = 0; i < lote.length; i++) {
@@ -180,7 +191,8 @@ export const CAMPO_PESSOAL =
 
 function celula(v: unknown): string {
   if (v === null || v === undefined) return "";
-  const s = typeof v === "object" ? JSON.stringify(v) : String(v);
+  // CPF/CNPJ dentro de textos (ex.: razão social de MEI) também saem mascarados
+  const s = mascararTexto(typeof v === "object" ? JSON.stringify(v) : String(v));
   return /[;"\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -191,7 +203,7 @@ export function gerarCsv(colunas: string[], linhas: Record<string, unknown>[]): 
 }
 
 const dois = (n: number) => String(n).padStart(2, "0");
-function carimbo(d = new Date()) {
+export function carimbo(d = new Date()) {
   return `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())}_${dois(d.getHours())}-${dois(d.getMinutes())}-${dois(d.getSeconds())}`;
 }
 
@@ -204,8 +216,12 @@ export function gravarCsv(
   linhas: Record<string, unknown>[],
   parcial = false,
 ): string {
+  return gravarCsvNome(dir, `${tipo}_${base}_${carimbo()}${parcial ? "_parcial" : ""}`, colunas, linhas);
+}
+
+/** Grava `<nome>[_N].csv` em `dir` sem sobrescrever nada. */
+export function gravarCsvNome(dir: string, nome: string, colunas: string[], linhas: Record<string, unknown>[]): string {
   mkdirSync(dir, { recursive: true });
-  const nome = `${tipo}_${base}_${carimbo()}${parcial ? "_parcial" : ""}`;
   const dados = gerarCsv(colunas, linhas);
   for (let n = 1; n < 1000; n++) {
     const arquivo = join(dir, `${nome}${n > 1 ? `_${n}` : ""}.csv`);
@@ -221,3 +237,37 @@ export function gravarCsv(
 
 export const juntar = (v: unknown[]) => v.filter((x) => x !== null && x !== undefined && x !== "").join("|");
 export const segundos = (inicio: number) => Math.round((Date.now() - inicio) / 100) / 10;
+
+/** Lê um CSV ";" (UTF-8, com ou sem BOM, aspas no padrão RFC 4180). Devolve cabeçalho e linhas. */
+export function lerCsv(texto: string): { cabecalho: string[]; linhas: string[][] } {
+  const t = texto.replace(/^\uFEFF/, "");
+  const linhas: string[][] = [];
+  let campo = "";
+  let linha: string[] = [];
+  let aspas = false;
+  for (let i = 0; i < t.length; i++) {
+    const ch = t[i];
+    if (aspas) {
+      if (ch === '"') {
+        if (t[i + 1] === '"') {
+          campo += '"';
+          i++;
+        } else aspas = false;
+      } else campo += ch;
+    } else if (ch === '"' && campo === "") aspas = true;
+    else if (ch === ";") {
+      linha.push(campo);
+      campo = "";
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && t[i + 1] === "\n") i++;
+      linha.push(campo);
+      campo = "";
+      if (linha.some((c) => c.trim() !== "")) linhas.push(linha);
+      linha = [];
+    } else campo += ch;
+  }
+  linha.push(campo);
+  if (linha.some((c) => c.trim() !== "")) linhas.push(linha);
+  const [cabecalho = [], ...resto] = linhas;
+  return { cabecalho: cabecalho.map((c) => c.trim().toLowerCase()), linhas: resto };
+}

@@ -14,6 +14,7 @@ O projeto não coleta dados. Ele lê da API do Hubsoft do **seu provedor** somen
 - O token de acesso do Hubsoft fica apenas na memória do processo, enquanto ele roda.
 - Nenhum dado de clientes é gravado em disco pelo projeto.
 - Senhas retornadas pelo Hubsoft (ex.: PPPoE) são mascaradas por padrão.
+- CPF/CNPJ saem sempre mascarados (só os 3 últimos dígitos) nos resultados, diffs, mensagens de erro, arquivos CSV e no log de auditoria.
 
 ## Compartilhamento com terceiros
 

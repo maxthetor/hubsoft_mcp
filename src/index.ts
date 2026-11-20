@@ -22,7 +22,9 @@ export const INSTRUCTIONS =
   "Faturas com status 'aguardando' e vencimento futuro (ex.: parcelas de carnê) não estão vencidas. " +
   "Para exportar a base inteira (serviços, CPEs, equipamentos/POPs) para planilha, use hubsoft_exportar_* com " +
   "servidor de UMA base: elas gravam um CSV e devolvem só o resumo; não pagine para montar planilhas. " +
-  "Senhas (ex.: PPPoE) são mascaradas por padrão. " +
+  "Senhas (ex.: PPPoE) são mascaradas por padrão e CPF/CNPJ sempre saem mascarados (3 últimos dígitos). " +
+  "Vínculo em lote: hubsoft_vincular_lote com um CSV de HUBSOFT_LOTE_DIR, sempre simulando antes (confirmar=false). " +
+  "hubsoft_equipamento_inativar/reativar usam rotas internas não documentadas. " +
   "Dados de clientes são pessoais (LGPD): mostre apenas o necessário. " +
   "Quando o login exige 2FA, o próprio MCP abre uma página no navegador para o usuário digitar o código. " +
   "Se a resposta disser 'Login 2FA pendente', mostre o link ao usuário e repita a consulta depois que ele " +
