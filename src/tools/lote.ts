@@ -9,7 +9,7 @@ import { auditar, diff, normPhy, primeiraLista, RELACOES, responder, resumoCpe, 
 
 /**
  * hubsoft_vincular_lote: vincula em lote ONUs já autorizadas na OLT aos serviços do Hubsoft, a partir
- * de um CSV em HUBSOFT_LOTE_DIR. Linha a linha, em sequência (nunca em paralelo):
+ * de um CSV na pasta das exportações (HUBSOFT_EXPORT_DIR). Linha a linha, em sequência (nunca em paralelo):
  *   leitura prévia → [desvincular_cpe da CPE antiga] → configurar_autenticacao → vincular_cpe → releitura.
  * confirmar=false (padrão) só classifica. POST nunca é repetido (no 429, a linha vira ERRO e o lote
  * espera retry_after antes da próxima). Para após 5 erros seguidos e, para não estourar o limite de
@@ -56,24 +56,24 @@ const num = (nome: string, padrao: number) => {
   return Number.isFinite(v) && v > 0 ? v : padrao;
 };
 
-/** Caminho real do arquivo, garantindo que fica dentro de HUBSOFT_LOTE_DIR (sem ../, links ou absolutos de fora). */
+/** Caminho real do arquivo, garantindo que fica dentro de HUBSOFT_EXPORT_DIR (sem ../, links ou absolutos de fora). */
 export function resolverArquivoLote(dir: string, arquivo: string): string {
   if (!/\.csv$/i.test(arquivo)) throw new Error("O arquivo do lote precisa ser .csv.");
   let raiz: string;
   try {
     raiz = realpathSync.native(dir);
   } catch {
-    throw new Error(`A pasta de lotes (HUBSOFT_LOTE_DIR) não existe: ${dir}. Crie a pasta e coloque o CSV nela.`);
+    throw new Error(`A pasta das exportações CSV (HUBSOFT_EXPORT_DIR) não existe: ${dir}. Crie a pasta e coloque o CSV nela.`);
   }
   let real: string;
   try {
     real = realpathSync.native(resolve(raiz, arquivo));
   } catch {
-    throw new Error(`Arquivo não encontrado na pasta de lotes (HUBSOFT_LOTE_DIR = ${raiz}): ${arquivo}`);
+    throw new Error(`Arquivo não encontrado na pasta das exportações CSV (HUBSOFT_EXPORT_DIR = ${raiz}): ${arquivo}`);
   }
   const rel = relative(raiz, real);
   if (!rel || rel.startsWith("..") || isAbsolute(rel)) {
-    throw new Error(`Recusado: o arquivo precisa estar dentro de HUBSOFT_LOTE_DIR (${raiz}).`);
+    throw new Error(`Recusado: o arquivo precisa estar dentro da pasta das exportações CSV (HUBSOFT_EXPORT_DIR = ${raiz}).`);
   }
   if (!statSync(real).isFile()) throw new Error(`Não é um arquivo: ${arquivo}`);
   return real;
@@ -247,7 +247,7 @@ export function registerLote(server: McpServer, hs: HubsoftClient) {
       title: "Vincular CPEs em lote (CSV)",
       description:
         "ESCRITA. Vincula em lote ONUs já autorizadas na OLT aos serviços, lendo um CSV (';', UTF-8) da pasta " +
-        "HUBSOFT_LOTE_DIR (caminhos fora dela são recusados). Colunas: base, id_cliente_servico, sn; opcionais " +
+        "das exportações CSV, HUBSOFT_EXPORT_DIR (caminhos fora dela são recusados). Colunas: base, id_cliente_servico, sn; opcionais " +
         "aprovar e desvincular_antes (S/N). Processa só as linhas da base em `servidor`, uma por vez: leitura prévia, " +
         "[desvincular a CPE antiga], configurar_autenticacao(phy_addr=sn), vincular_cpe e releitura. Pula serviço " +
         "cancelado, SN fora do inventário, SN em outro serviço, serviço já com este SN (JA_VINCULADO) e serviço com " +
@@ -255,7 +255,7 @@ export function registerLote(server: McpServer, hs: HubsoftClient) {
         "após 5 erros seguidos; se o tempo acabar, para entre linhas e informa retomar_a_partir_da_linha. Grava " +
         "<arquivo>_resultado_<data>.csv (ou _simulacao_) ao lado do arquivo e devolve só o resumo.",
       inputSchema: {
-        arquivo: z.string().min(1).describe("Nome do CSV dentro de HUBSOFT_LOTE_DIR (pode ter subpasta)."),
+        arquivo: z.string().min(1).describe("Nome do CSV dentro da pasta das exportações CSV (HUBSOFT_EXPORT_DIR; pode ter subpasta)."),
         confirmar: z.boolean().optional().describe("false (padrão) = só classifica as linhas. true = executa."),
         limite: z.number().int().min(1).max(300).optional().describe("Máximo de linhas processadas nesta chamada (padrão 50, máx. 300)."),
         so_aprovadas: z.boolean().optional().describe("true (padrão) = só linhas com aprovar=S."),
@@ -273,7 +273,7 @@ export function registerLote(server: McpServer, hs: HubsoftClient) {
         const aPartir = args.a_partir_da_linha ?? 2;
         const base = hs.config.nome;
 
-        const caminho = resolverArquivoLote(hs.config.loteDir, args.arquivo);
+        const caminho = resolverArquivoLote(hs.config.exportDir, args.arquivo);
         const { cabecalho, linhas: brutas } = lerCsv(readFileSync(caminho, "utf8"));
         const faltam = OBRIGATORIAS.filter((c) => !cabecalho.includes(c));
         if (faltam.length) throw new Error(`Colunas obrigatórias ausentes no CSV: ${faltam.join(", ")} (separador ';').`);

@@ -43,8 +43,6 @@ export interface HubsoftConfig {
   exposeSecrets: boolean;
   /** Pasta onde as ferramentas de exportação gravam os CSV. */
   exportDir: string;
-  /** Única pasta de onde hubsoft_vincular_lote lê arquivos (e onde grava o resultado). */
-  loteDir: string;
 }
 
 /** Quantidade de servidores configuráveis por variáveis numeradas (HUBSOFT_2_*, …). */
@@ -119,9 +117,6 @@ export const AUDITORIA_PADRAO = join(homedir(), ".config", "hubsoft", "auditoria
 /** Pasta padrão das exportações CSV. */
 export const EXPORT_PADRAO = join(homedir(), "hubsoft-exportacoes");
 
-/** Pasta padrão dos lotes de vínculo (CSV de entrada e de resultado). */
-export const LOTE_PADRAO = join(homedir(), "hubsoft-lotes");
-
 function pasta(v: string | undefined, padrao: string) {
   if (!v) return padrao;
   return v === "~" ? homedir() : v.replace(/^~(?=[\\/])/, homedir());
@@ -137,7 +132,6 @@ function globais() {
     maxResponseChars: Number(env("HUBSOFT_MAX_RESPONSE_CHARS") ?? 60000),
     exposeSecrets: bool("HUBSOFT_EXPOR_SENHAS", false),
     exportDir: pasta(env("HUBSOFT_EXPORT_DIR"), EXPORT_PADRAO),
-    loteDir: pasta(env("HUBSOFT_LOTE_DIR"), LOTE_PADRAO),
   };
 }
 

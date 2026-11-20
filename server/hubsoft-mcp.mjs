@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// hubsoft-mcp 0.12.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
+// hubsoft-mcp 0.13.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
 // Arquivo gerado por scripts/bundle.mjs a partir de src/. Não edite.
 import { createRequire as __cr } from "node:module"; const require = __cr(import.meta.url);
 var __create = Object.create;
@@ -36781,7 +36781,6 @@ function simNao(v) {
 }
 var AUDITORIA_PADRAO = join2(homedir2(), ".config", "hubsoft", "auditoria.jsonl");
 var EXPORT_PADRAO = join2(homedir2(), "hubsoft-exportacoes");
-var LOTE_PADRAO = join2(homedir2(), "hubsoft-lotes");
 function pasta(v, padrao) {
   if (!v) return padrao;
   return v === "~" ? homedir2() : v.replace(/^~(?=[\\/])/, homedir2());
@@ -36795,8 +36794,7 @@ function globais() {
     auditoria: aud === void 0 ? AUDITORIA_PADRAO : aud.toLowerCase() === "off" ? "" : aud,
     maxResponseChars: Number(env("HUBSOFT_MAX_RESPONSE_CHARS") ?? 6e4),
     exposeSecrets: bool("HUBSOFT_EXPOR_SENHAS", false),
-    exportDir: pasta(env("HUBSOFT_EXPORT_DIR"), EXPORT_PADRAO),
-    loteDir: pasta(env("HUBSOFT_LOTE_DIR"), LOTE_PADRAO)
+    exportDir: pasta(env("HUBSOFT_EXPORT_DIR"), EXPORT_PADRAO)
   };
 }
 function lerArquivo(caminho) {
@@ -39539,17 +39537,17 @@ function resolverArquivoLote(dir, arquivo) {
   try {
     raiz = realpathSync.native(dir);
   } catch {
-    throw new Error(`A pasta de lotes (HUBSOFT_LOTE_DIR) n\xE3o existe: ${dir}. Crie a pasta e coloque o CSV nela.`);
+    throw new Error(`A pasta das exporta\xE7\xF5es CSV (HUBSOFT_EXPORT_DIR) n\xE3o existe: ${dir}. Crie a pasta e coloque o CSV nela.`);
   }
   let real;
   try {
     real = realpathSync.native(resolve(raiz, arquivo));
   } catch {
-    throw new Error(`Arquivo n\xE3o encontrado na pasta de lotes (HUBSOFT_LOTE_DIR = ${raiz}): ${arquivo}`);
+    throw new Error(`Arquivo n\xE3o encontrado na pasta das exporta\xE7\xF5es CSV (HUBSOFT_EXPORT_DIR = ${raiz}): ${arquivo}`);
   }
   const rel = relative(raiz, real);
   if (!rel || rel.startsWith("..") || isAbsolute(rel)) {
-    throw new Error(`Recusado: o arquivo precisa estar dentro de HUBSOFT_LOTE_DIR (${raiz}).`);
+    throw new Error(`Recusado: o arquivo precisa estar dentro da pasta das exporta\xE7\xF5es CSV (HUBSOFT_EXPORT_DIR = ${raiz}).`);
   }
   if (!statSync(real).isFile()) throw new Error(`N\xE3o \xE9 um arquivo: ${arquivo}`);
   return real;
@@ -39694,9 +39692,9 @@ function registerLote(server, hs) {
     "hubsoft_vincular_lote",
     {
       title: "Vincular CPEs em lote (CSV)",
-      description: "ESCRITA. Vincula em lote ONUs j\xE1 autorizadas na OLT aos servi\xE7os, lendo um CSV (';', UTF-8) da pasta HUBSOFT_LOTE_DIR (caminhos fora dela s\xE3o recusados). Colunas: base, id_cliente_servico, sn; opcionais aprovar e desvincular_antes (S/N). Processa s\xF3 as linhas da base em `servidor`, uma por vez: leitura pr\xE9via, [desvincular a CPE antiga], configurar_autenticacao(phy_addr=sn), vincular_cpe e releitura. Pula servi\xE7o cancelado, SN fora do invent\xE1rio, SN em outro servi\xE7o, servi\xE7o j\xE1 com este SN (JA_VINCULADO) e servi\xE7o com outra CPE n\xE3o-MAC sem desvincular_antes=S. confirmar=false (padr\xE3o) s\xF3 classifica, sem enviar nada. Para ap\xF3s 5 erros seguidos; se o tempo acabar, para entre linhas e informa retomar_a_partir_da_linha. Grava <arquivo>_resultado_<data>.csv (ou _simulacao_) ao lado do arquivo e devolve s\xF3 o resumo.",
+      description: "ESCRITA. Vincula em lote ONUs j\xE1 autorizadas na OLT aos servi\xE7os, lendo um CSV (';', UTF-8) da pasta das exporta\xE7\xF5es CSV, HUBSOFT_EXPORT_DIR (caminhos fora dela s\xE3o recusados). Colunas: base, id_cliente_servico, sn; opcionais aprovar e desvincular_antes (S/N). Processa s\xF3 as linhas da base em `servidor`, uma por vez: leitura pr\xE9via, [desvincular a CPE antiga], configurar_autenticacao(phy_addr=sn), vincular_cpe e releitura. Pula servi\xE7o cancelado, SN fora do invent\xE1rio, SN em outro servi\xE7o, servi\xE7o j\xE1 com este SN (JA_VINCULADO) e servi\xE7o com outra CPE n\xE3o-MAC sem desvincular_antes=S. confirmar=false (padr\xE3o) s\xF3 classifica, sem enviar nada. Para ap\xF3s 5 erros seguidos; se o tempo acabar, para entre linhas e informa retomar_a_partir_da_linha. Grava <arquivo>_resultado_<data>.csv (ou _simulacao_) ao lado do arquivo e devolve s\xF3 o resumo.",
       inputSchema: {
-        arquivo: external_exports.string().min(1).describe("Nome do CSV dentro de HUBSOFT_LOTE_DIR (pode ter subpasta)."),
+        arquivo: external_exports.string().min(1).describe("Nome do CSV dentro da pasta das exporta\xE7\xF5es CSV (HUBSOFT_EXPORT_DIR; pode ter subpasta)."),
         confirmar: external_exports.boolean().optional().describe("false (padr\xE3o) = s\xF3 classifica as linhas. true = executa."),
         limite: external_exports.number().int().min(1).max(300).optional().describe("M\xE1ximo de linhas processadas nesta chamada (padr\xE3o 50, m\xE1x. 300)."),
         so_aprovadas: external_exports.boolean().optional().describe("true (padr\xE3o) = s\xF3 linhas com aprovar=S."),
@@ -39713,7 +39711,7 @@ function registerLote(server, hs) {
         const soAprovadas = args.so_aprovadas !== false;
         const aPartir = args.a_partir_da_linha ?? 2;
         const base = hs.config.nome;
-        const caminho = resolverArquivoLote(hs.config.loteDir, args.arquivo);
+        const caminho = resolverArquivoLote(hs.config.exportDir, args.arquivo);
         const { cabecalho, linhas: brutas } = lerCsv(readFileSync3(caminho, "utf8"));
         const faltam = OBRIGATORIAS.filter((c) => !cabecalho.includes(c));
         if (faltam.length) throw new Error(`Colunas obrigat\xF3rias ausentes no CSV: ${faltam.join(", ")} (separador ';').`);
@@ -40107,7 +40105,7 @@ function collectTools(hs) {
 }
 
 // src/version.ts
-var VERSION = "0.12.0";
+var VERSION = "0.13.0";
 
 // src/multi.ts
 function diagnosticoVariaveis() {
@@ -40354,7 +40352,7 @@ function collectMultiTools(servers) {
 }
 
 // src/index.ts
-var INSTRUCTIONS = "Ferramentas para o ERP Hubsoft (provedores de internet). As chamadas usam o login do pr\xF3prio usu\xE1rio, ent\xE3o o acesso segue as permiss\xF5es dele no Hubsoft. Para perguntas sobre um cliente, comece por hubsoft_situacao_cliente (CPF/CNPJ ou c\xF3digo). Para listas de clientes bloqueados/suspensos ou por qualquer status de servi\xE7o, use hubsoft_servicos_por_status (filtra no servidor; n\xE3o varra a base). Para totais de um per\xEDodo (faturamento, recebimentos, inadimpl\xEAncia por m\xEAs), use hubsoft_resumo_financeiro, que pagina e soma no servidor; nunca pagine faturas para somar. Para clientes com cadastro ativo e sem servi\xE7o ativo, use hubsoft_clientes_ativos_sem_servico_ativo (varre a base no servidor); nunca pagine clientes manualmente. Para buscas por nome, login ou outros campos use hubsoft_buscar_cliente. Para relat\xF3rios por per\xEDodo, POPs, CPEs/ONUs, notas fiscais e sess\xF5es RADIUS, use as ferramentas GraphQL (hubsoft_graphql_consultas \u2192 hubsoft_graphql_tipo \u2192 hubsoft_graphql). Faturas com status 'aguardando' e vencimento futuro (ex.: parcelas de carn\xEA) n\xE3o est\xE3o vencidas. Para exportar a base inteira (servi\xE7os, CPEs, equipamentos/POPs) para planilha, use hubsoft_exportar_* com servidor de UMA base: elas gravam um CSV e devolvem s\xF3 o resumo; n\xE3o pagine para montar planilhas. Senhas (ex.: PPPoE) s\xE3o mascaradas por padr\xE3o e CPF/CNPJ sempre saem mascarados (3 \xFAltimos d\xEDgitos). V\xEDnculo em lote: hubsoft_vincular_lote com um CSV de HUBSOFT_LOTE_DIR, sempre simulando antes (confirmar=false). hubsoft_equipamento_inativar/reativar usam rotas internas n\xE3o documentadas. Dados de clientes s\xE3o pessoais (LGPD): mostre apenas o necess\xE1rio. Quando o login exige 2FA, o pr\xF3prio MCP abre uma p\xE1gina no navegador para o usu\xE1rio digitar o c\xF3digo. Se a resposta disser 'Login 2FA pendente', mostre o link ao usu\xE1rio e repita a consulta depois que ele conectar. S\xF3 se isso n\xE3o for poss\xEDvel, pe\xE7a o c\xF3digo e chame hubsoft_conectar; nunca invente um c\xF3digo. O token fica salvo, ent\xE3o isso s\xF3 \xE9 preciso no primeiro acesso. Antes de qualquer a\xE7\xE3o que altere dados, confirme cliente e servi\xE7o com o usu\xE1rio. Ferramentas de escrita/controle de CPE (configurar_autenticacao, vincular/desvincular_cpe, reiniciar/restaurar_cpe, cpe_gerenciar) exigem servidor com UMA base e come\xE7am SEMPRE em simula\xE7\xE3o (confirmar=false): mostre ao usu\xE1rio o estado atual, a requisi\xE7\xE3o e o efeito, e s\xF3 repita com confirmar=true depois de ele aprovar explicitamente. Depois de executar, mostre o diff antes/depois.";
+var INSTRUCTIONS = "Ferramentas para o ERP Hubsoft (provedores de internet). As chamadas usam o login do pr\xF3prio usu\xE1rio, ent\xE3o o acesso segue as permiss\xF5es dele no Hubsoft. Para perguntas sobre um cliente, comece por hubsoft_situacao_cliente (CPF/CNPJ ou c\xF3digo). Para listas de clientes bloqueados/suspensos ou por qualquer status de servi\xE7o, use hubsoft_servicos_por_status (filtra no servidor; n\xE3o varra a base). Para totais de um per\xEDodo (faturamento, recebimentos, inadimpl\xEAncia por m\xEAs), use hubsoft_resumo_financeiro, que pagina e soma no servidor; nunca pagine faturas para somar. Para clientes com cadastro ativo e sem servi\xE7o ativo, use hubsoft_clientes_ativos_sem_servico_ativo (varre a base no servidor); nunca pagine clientes manualmente. Para buscas por nome, login ou outros campos use hubsoft_buscar_cliente. Para relat\xF3rios por per\xEDodo, POPs, CPEs/ONUs, notas fiscais e sess\xF5es RADIUS, use as ferramentas GraphQL (hubsoft_graphql_consultas \u2192 hubsoft_graphql_tipo \u2192 hubsoft_graphql). Faturas com status 'aguardando' e vencimento futuro (ex.: parcelas de carn\xEA) n\xE3o est\xE3o vencidas. Para exportar a base inteira (servi\xE7os, CPEs, equipamentos/POPs) para planilha, use hubsoft_exportar_* com servidor de UMA base: elas gravam um CSV e devolvem s\xF3 o resumo; n\xE3o pagine para montar planilhas. Senhas (ex.: PPPoE) s\xE3o mascaradas por padr\xE3o e CPF/CNPJ sempre saem mascarados (3 \xFAltimos d\xEDgitos). V\xEDnculo em lote: hubsoft_vincular_lote com um CSV da pasta das exporta\xE7\xF5es (HUBSOFT_EXPORT_DIR), sempre simulando antes (confirmar=false). hubsoft_equipamento_inativar/reativar usam rotas internas n\xE3o documentadas. Dados de clientes s\xE3o pessoais (LGPD): mostre apenas o necess\xE1rio. Quando o login exige 2FA, o pr\xF3prio MCP abre uma p\xE1gina no navegador para o usu\xE1rio digitar o c\xF3digo. Se a resposta disser 'Login 2FA pendente', mostre o link ao usu\xE1rio e repita a consulta depois que ele conectar. S\xF3 se isso n\xE3o for poss\xEDvel, pe\xE7a o c\xF3digo e chame hubsoft_conectar; nunca invente um c\xF3digo. O token fica salvo, ent\xE3o isso s\xF3 \xE9 preciso no primeiro acesso. Antes de qualquer a\xE7\xE3o que altere dados, confirme cliente e servi\xE7o com o usu\xE1rio. Ferramentas de escrita/controle de CPE (configurar_autenticacao, vincular/desvincular_cpe, reiniciar/restaurar_cpe, cpe_gerenciar) exigem servidor com UMA base e come\xE7am SEMPRE em simula\xE7\xE3o (confirmar=false): mostre ao usu\xE1rio o estado atual, a requisi\xE7\xE3o e o efeito, e s\xF3 repita com confirmar=true depois de ele aprovar explicitamente. Depois de executar, mostre o diff antes/depois.";
 async function main() {
   const servers = loadServers();
   const cfg = servers[0];

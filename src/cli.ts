@@ -142,7 +142,6 @@ function toolsSemCredenciais(): ToolDef[] {
     auditoria: "",
     tokens: "",
     exportDir: "",
-    loteDir: "",
   });
   return collectTools(fake);
 }

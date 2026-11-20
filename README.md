@@ -269,7 +269,7 @@ node scripts/hubsoft.mjs graphql --query '{ pops(first: 10) { data { id_pop } } 
 | `hubsoft_reiniciar_cpe` ✏️⚠️ | Reinicia a CPE (cliente fica sem conexão durante o reboot) |
 | `hubsoft_restaurar_cpe` ✏️⚠️ | Restaura a CPE para fábrica (exige `confirmar_phy_addr`) |
 | `hubsoft_cpe_gerenciar` ✏️ | Altera parâmetros da CPE via ACS (SSID, senha Wi-Fi…) |
-| `hubsoft_vincular_lote` ✏️⚠️ | Vincula em lote ONUs já autorizadas a partir de um CSV em `HUBSOFT_LOTE_DIR` (simulação, depois execução) |
+| `hubsoft_vincular_lote` ✏️⚠️ | Vincula em lote ONUs já autorizadas a partir de um CSV na pasta das exportações (`HUBSOFT_EXPORT_DIR`) (simulação, depois execução) |
 | `hubsoft_equipamento_inativar` ✏️⚠️🔧 | Inativa (soft delete) um equipamento de conexão; recusa se houver serviços ligados, salvo `forcar=true` |
 | `hubsoft_equipamento_reativar` ✏️🔧 | Reativa um equipamento inativado (restore) |
 
@@ -340,7 +340,7 @@ Na simulação, `hubsoft_desvincular_cpe` mostra o rollback pronto: `configurar_
 
 Faz o mesmo fluxo do exemplo acima para várias linhas de um CSV, **uma linha por vez** (nunca em paralelo).
 
-1. **Arquivo.** CSV com `;`, UTF-8 (com ou sem BOM), **dentro de `HUBSOFT_LOTE_DIR`** (padrão `~/hubsoft-lotes`). Caminhos fora dela (`../`, absolutos, links) são recusados.
+1. **Arquivo.** CSV com `;`, UTF-8 (com ou sem BOM), **dentro da Pasta das exportações CSV (`HUBSOFT_EXPORT_DIR`, padrão `~/hubsoft-exportacoes`)**, a mesma das ferramentas 📄. Caminhos fora dela (`../`, absolutos, links) são recusados.
 2. **Colunas.** Obrigatórias: `base`, `id_cliente_servico`, `sn`. Opcionais: `aprovar` e `desvincular_antes` (`S`/`N`).
 3. **Parâmetros.** `servidor` (uma base; só as linhas dessa base são processadas), `arquivo`, `confirmar` (padrão `false`), `limite` (padrão 50, máx. 300), `so_aprovadas` (padrão `true`: só linhas com `aprovar=S`) e `a_partir_da_linha` (para retomar).
 4. **Por linha:** leitura do serviço e da CPE → [`desvincular_cpe` só da CPE antiga, com o `phy_addr` dela, se `desvincular_antes=S`] → `configurar_autenticacao {id_cliente_servico, phy_addr: sn}` (o 422 "não é necessário a alteração" conta como OK) → `vincular_cpe {id_cliente_servico}` → releitura (OLT, interface e CPEs depois).
@@ -395,10 +395,9 @@ base_pf;1388;FHTT0A1B2C3D;S;S
 | `HUBSOFT_GRAPHQL_PATH` | `/graphql/v1` | `off` desativa o GraphQL |
 | `HUBSOFT_EXPOR_SENHAS` | `false` | `true` mostra senhas (ex.: PPPoE) nas respostas |
 | `HUBSOFT_MAX_RESPONSE_CHARS` | `60000` | Limite de tamanho das respostas |
-| `HUBSOFT_EXPORT_DIR` | `~/hubsoft-exportacoes` | Pasta onde as ferramentas 📄 gravam os CSV |
+| `HUBSOFT_EXPORT_DIR` | `~/hubsoft-exportacoes` | Pasta onde as ferramentas 📄 gravam os CSV; também é a única de onde `hubsoft_vincular_lote` lê o CSV (e onde grava o resultado) |
 | `HUBSOFT_EXPORT_REQ_S` | `20` | Limite de requisições por segundo por base nas exportações |
 | `HUBSOFT_EXPORT_PARALELO` | `4` | Páginas buscadas ao mesmo tempo nas exportações (máx. 10) |
-| `HUBSOFT_LOTE_DIR` | `~/hubsoft-lotes` | Única pasta de onde `hubsoft_vincular_lote` lê CSV (e onde grava o resultado) |
 | `HUBSOFT_LOTE_TEMPO_MAX_S` | `55` | Tempo máximo de uma chamada do lote; depois disso para entre linhas e informa de onde retomar |
 | `HUBSOFT_2_*` … `HUBSOFT_9_*` | — | Bases adicionais (mesmos sufixos: `NOME`, `DESCRICAO`, `URL`, `CLIENT_ID`, `CLIENT_SECRET`, `USERNAME`, `PASSWORD`, `OTP_SECRET`, `GRAPHQL_PATH`, `PERMITIR_ESCRITA`) |
 | `HUBSOFT_CONFIG` | `~/.config/hubsoft/servidores.json` | Arquivo com a lista de bases |

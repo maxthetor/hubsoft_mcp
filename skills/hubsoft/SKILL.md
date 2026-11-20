@@ -78,7 +78,7 @@ Só existem com `HUBSOFT_PERMITIR_ESCRITA=true`: `desbloqueio_confianca`, `envia
 
 Vincular ONU já autorizada sem desprovisionar: `configurar_autenticacao` (phy_addr e, se preciso, `id_interface_conexao`), depois `vincular_cpe`. O Hubsoft preenche OLT, PON e roteamento sozinho; confira no diff. `restaurar_cpe` apaga PPPoE e Wi-Fi da CPE e exige `confirmar_phy_addr`. Para Wi-Fi, leia antes com `cpe_iniciar_gerenciamento` e use os mesmos prefixos em `cpe_gerenciar`.
 
-Vínculo em lote: o usuário coloca o CSV (`base;id_cliente_servico;sn;aprovar;desvincular_antes`) em `HUBSOFT_LOTE_DIR`. Rode `vincular_lote` primeiro com `confirmar=false`, mostre a contagem por motivo e só depois `confirmar=true`. Se vier `retomar_a_partir_da_linha`, repita com `a_partir_da_linha`. Não abra os CSV de resultado na conversa; informe o caminho.
+Vínculo em lote: o usuário coloca o CSV (`base;id_cliente_servico;sn;aprovar;desvincular_antes`) na pasta das exportações CSV (`HUBSOFT_EXPORT_DIR`). Rode `vincular_lote` primeiro com `confirmar=false`, mostre a contagem por motivo e só depois `confirmar=true`. Se vier `retomar_a_partir_da_linha`, repita com `a_partir_da_linha`. Não abra os CSV de resultado na conversa; informe o caminho.
 
 `equipamento_inativar`/`equipamento_reativar` usam rotas internas não documentadas (podem mudar): simule, confira a contagem de serviços ligados e peça ao usuário o nome exato para `confirmar_nome`. Não use `forcar=true` sem pedido explícito.
 

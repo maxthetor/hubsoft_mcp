@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// hubsoft-mcp 0.12.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
+// hubsoft-mcp 0.13.0 — https://github.com/maxthetor/hubsoft_mcp (MIT)
 // Arquivo gerado por scripts/bundle.mjs a partir de src/. Não edite.
 import { createRequire as __cr } from "node:module"; const require = __cr(import.meta.url);
 var __defProp = Object.defineProperty;
@@ -19853,7 +19853,6 @@ function simNao(v) {
 }
 var AUDITORIA_PADRAO = join2(homedir2(), ".config", "hubsoft", "auditoria.jsonl");
 var EXPORT_PADRAO = join2(homedir2(), "hubsoft-exportacoes");
-var LOTE_PADRAO = join2(homedir2(), "hubsoft-lotes");
 function pasta(v, padrao) {
   if (!v) return padrao;
   return v === "~" ? homedir2() : v.replace(/^~(?=[\\/])/, homedir2());
@@ -19867,8 +19866,7 @@ function globais() {
     auditoria: aud === void 0 ? AUDITORIA_PADRAO : aud.toLowerCase() === "off" ? "" : aud,
     maxResponseChars: Number(env("HUBSOFT_MAX_RESPONSE_CHARS") ?? 6e4),
     exposeSecrets: bool("HUBSOFT_EXPOR_SENHAS", false),
-    exportDir: pasta(env("HUBSOFT_EXPORT_DIR"), EXPORT_PADRAO),
-    loteDir: pasta(env("HUBSOFT_LOTE_DIR"), LOTE_PADRAO)
+    exportDir: pasta(env("HUBSOFT_EXPORT_DIR"), EXPORT_PADRAO)
   };
 }
 function lerArquivo(caminho) {
@@ -22633,17 +22631,17 @@ function resolverArquivoLote(dir, arquivo) {
   try {
     raiz = realpathSync.native(dir);
   } catch {
-    throw new Error(`A pasta de lotes (HUBSOFT_LOTE_DIR) n\xE3o existe: ${dir}. Crie a pasta e coloque o CSV nela.`);
+    throw new Error(`A pasta das exporta\xE7\xF5es CSV (HUBSOFT_EXPORT_DIR) n\xE3o existe: ${dir}. Crie a pasta e coloque o CSV nela.`);
   }
   let real;
   try {
     real = realpathSync.native(resolve(raiz, arquivo));
   } catch {
-    throw new Error(`Arquivo n\xE3o encontrado na pasta de lotes (HUBSOFT_LOTE_DIR = ${raiz}): ${arquivo}`);
+    throw new Error(`Arquivo n\xE3o encontrado na pasta das exporta\xE7\xF5es CSV (HUBSOFT_EXPORT_DIR = ${raiz}): ${arquivo}`);
   }
   const rel = relative(raiz, real);
   if (!rel || rel.startsWith("..") || isAbsolute(rel)) {
-    throw new Error(`Recusado: o arquivo precisa estar dentro de HUBSOFT_LOTE_DIR (${raiz}).`);
+    throw new Error(`Recusado: o arquivo precisa estar dentro da pasta das exporta\xE7\xF5es CSV (HUBSOFT_EXPORT_DIR = ${raiz}).`);
   }
   if (!statSync(real).isFile()) throw new Error(`N\xE3o \xE9 um arquivo: ${arquivo}`);
   return real;
@@ -22788,9 +22786,9 @@ function registerLote(server, hs) {
     "hubsoft_vincular_lote",
     {
       title: "Vincular CPEs em lote (CSV)",
-      description: "ESCRITA. Vincula em lote ONUs j\xE1 autorizadas na OLT aos servi\xE7os, lendo um CSV (';', UTF-8) da pasta HUBSOFT_LOTE_DIR (caminhos fora dela s\xE3o recusados). Colunas: base, id_cliente_servico, sn; opcionais aprovar e desvincular_antes (S/N). Processa s\xF3 as linhas da base em `servidor`, uma por vez: leitura pr\xE9via, [desvincular a CPE antiga], configurar_autenticacao(phy_addr=sn), vincular_cpe e releitura. Pula servi\xE7o cancelado, SN fora do invent\xE1rio, SN em outro servi\xE7o, servi\xE7o j\xE1 com este SN (JA_VINCULADO) e servi\xE7o com outra CPE n\xE3o-MAC sem desvincular_antes=S. confirmar=false (padr\xE3o) s\xF3 classifica, sem enviar nada. Para ap\xF3s 5 erros seguidos; se o tempo acabar, para entre linhas e informa retomar_a_partir_da_linha. Grava <arquivo>_resultado_<data>.csv (ou _simulacao_) ao lado do arquivo e devolve s\xF3 o resumo.",
+      description: "ESCRITA. Vincula em lote ONUs j\xE1 autorizadas na OLT aos servi\xE7os, lendo um CSV (';', UTF-8) da pasta das exporta\xE7\xF5es CSV, HUBSOFT_EXPORT_DIR (caminhos fora dela s\xE3o recusados). Colunas: base, id_cliente_servico, sn; opcionais aprovar e desvincular_antes (S/N). Processa s\xF3 as linhas da base em `servidor`, uma por vez: leitura pr\xE9via, [desvincular a CPE antiga], configurar_autenticacao(phy_addr=sn), vincular_cpe e releitura. Pula servi\xE7o cancelado, SN fora do invent\xE1rio, SN em outro servi\xE7o, servi\xE7o j\xE1 com este SN (JA_VINCULADO) e servi\xE7o com outra CPE n\xE3o-MAC sem desvincular_antes=S. confirmar=false (padr\xE3o) s\xF3 classifica, sem enviar nada. Para ap\xF3s 5 erros seguidos; se o tempo acabar, para entre linhas e informa retomar_a_partir_da_linha. Grava <arquivo>_resultado_<data>.csv (ou _simulacao_) ao lado do arquivo e devolve s\xF3 o resumo.",
       inputSchema: {
-        arquivo: external_exports.string().min(1).describe("Nome do CSV dentro de HUBSOFT_LOTE_DIR (pode ter subpasta)."),
+        arquivo: external_exports.string().min(1).describe("Nome do CSV dentro da pasta das exporta\xE7\xF5es CSV (HUBSOFT_EXPORT_DIR; pode ter subpasta)."),
         confirmar: external_exports.boolean().optional().describe("false (padr\xE3o) = s\xF3 classifica as linhas. true = executa."),
         limite: external_exports.number().int().min(1).max(300).optional().describe("M\xE1ximo de linhas processadas nesta chamada (padr\xE3o 50, m\xE1x. 300)."),
         so_aprovadas: external_exports.boolean().optional().describe("true (padr\xE3o) = s\xF3 linhas com aprovar=S."),
@@ -22807,7 +22805,7 @@ function registerLote(server, hs) {
         const soAprovadas = args.so_aprovadas !== false;
         const aPartir = args.a_partir_da_linha ?? 2;
         const base = hs.config.nome;
-        const caminho = resolverArquivoLote(hs.config.loteDir, args.arquivo);
+        const caminho = resolverArquivoLote(hs.config.exportDir, args.arquivo);
         const { cabecalho, linhas: brutas } = lerCsv(readFileSync3(caminho, "utf8"));
         const faltam = OBRIGATORIAS.filter((c) => !cabecalho.includes(c));
         if (faltam.length) throw new Error(`Colunas obrigat\xF3rias ausentes no CSV: ${faltam.join(", ")} (separador ';').`);
@@ -23201,7 +23199,7 @@ function collectTools(hs) {
 }
 
 // src/version.ts
-var VERSION = "0.12.0";
+var VERSION = "0.13.0";
 
 // src/multi.ts
 function diagnosticoVariaveis() {
@@ -23555,8 +23553,7 @@ function toolsSemCredenciais() {
     exposeSecrets: false,
     auditoria: "",
     tokens: "",
-    exportDir: "",
-    loteDir: ""
+    exportDir: ""
   });
   return collectTools(fake);
 }

@@ -117,8 +117,8 @@ await new Promise(r => srv.listening ? r() : srv.once("listening", r));
 const url = `http://127.0.0.1:${srv.address().port}`;
 
 const raiz = mkdtempSync(join(tmpdir(), "hs-lote-"));
-const loteDir = join(raiz, "lotes"); mkdirSync(loteDir);
 const exportDir = join(raiz, "export"); mkdirSync(exportDir);
+const loteDir = exportDir; // o lote lê e grava na pasta das exportações
 const auditoria = join(raiz, "auditoria.jsonl");
 writeFileSync(join(raiz, "fora.csv"), "base;id_cliente_servico;sn\r\n");
 const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("HUBSOFT_")));
@@ -126,7 +126,7 @@ const cred = (pfx) => ({ [`${pfx}URL`]: url, [`${pfx}CLIENT_ID`]: "1", [`${pfx}C
 async function conectar(extra = {}) {
   const t = new StdioClientTransport({ command: "node", args: ["server/hubsoft-mcp.mjs"], stderr: "pipe", env: { ...baseEnv,
     HUBSOFT_TOKENS: "off", HUBSOFT_2FA_DIALOGO: "off", HUBSOFT_PERMITIR_ESCRITA: "true", HUBSOFT_AUDITORIA: auditoria,
-    HUBSOFT_LOTE_DIR: loteDir, HUBSOFT_EXPORT_DIR: exportDir, HUBSOFT_EXPORT_ESPERA_MS: "10",
+    HUBSOFT_EXPORT_DIR: exportDir, HUBSOFT_EXPORT_ESPERA_MS: "10",
     HUBSOFT_NOME: "base_pf", ...cred("HUBSOFT_"), HUBSOFT_2_NOME: "base_pj", ...cred("HUBSOFT_2_"), ...extra } });
   const c = new Client({ name: "lote", version: "0" }); await c.connect(t); return c;
 }

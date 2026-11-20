@@ -23,7 +23,7 @@ export const INSTRUCTIONS =
   "Para exportar a base inteira (serviços, CPEs, equipamentos/POPs) para planilha, use hubsoft_exportar_* com " +
   "servidor de UMA base: elas gravam um CSV e devolvem só o resumo; não pagine para montar planilhas. " +
   "Senhas (ex.: PPPoE) são mascaradas por padrão e CPF/CNPJ sempre saem mascarados (3 últimos dígitos). " +
-  "Vínculo em lote: hubsoft_vincular_lote com um CSV de HUBSOFT_LOTE_DIR, sempre simulando antes (confirmar=false). " +
+  "Vínculo em lote: hubsoft_vincular_lote com um CSV da pasta das exportações (HUBSOFT_EXPORT_DIR), sempre simulando antes (confirmar=false). " +
   "hubsoft_equipamento_inativar/reativar usam rotas internas não documentadas. " +
   "Dados de clientes são pessoais (LGPD): mostre apenas o necessário. " +
   "Quando o login exige 2FA, o próprio MCP abre uma página no navegador para o usuário digitar o código. " +

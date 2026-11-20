@@ -22,10 +22,9 @@ O administrador do provedor cria no Hubsoft:
 | `HUBSOFT_TOKENS` | não | Arquivo dos tokens salvos (padrão `~/.config/hubsoft/tokens.json`; `off` = só memória) |
 | `HUBSOFT_PERMITIR_ESCRITA` | não | `true` habilita as ferramentas de escrita/CPE (padrão: desligado). Por base: `HUBSOFT_2_PERMITIR_ESCRITA` ou `"permitir_escrita": true` no servidores.json |
 | `HUBSOFT_AUDITORIA` | não | Log JSONL das escritas (padrão `~/.config/hubsoft/auditoria.jsonl`; `off` desativa) |
-| `HUBSOFT_EXPORT_DIR` | não | Pasta dos CSV das ferramentas `exportar_*` (padrão `~/hubsoft-exportacoes`) |
+| `HUBSOFT_EXPORT_DIR` | não | Pasta dos CSV das ferramentas `exportar_*` e única de onde `vincular_lote` lê o CSV (padrão `~/hubsoft-exportacoes`) |
 | `HUBSOFT_EXPORT_REQ_S` | não | Limite de requisições por segundo por base nas exportações (padrão `20`, usado com 10% de folga) |
 | `HUBSOFT_EXPORT_PARALELO` | não | Páginas buscadas ao mesmo tempo nas exportações (padrão `4`, máx. `10`) |
-| `HUBSOFT_LOTE_DIR` | não | Única pasta de onde `vincular_lote` lê o CSV e onde grava o resultado (padrão `~/hubsoft-lotes`) |
 | `HUBSOFT_LOTE_TEMPO_MAX_S` | não | Tempo máximo por chamada do lote (padrão `55`); depois para entre linhas e informa de onde retomar |
 | `HUBSOFT_GRAPHQL_PATH` | não | Padrão `/graphql/v1`; `off` desativa |
 | `HUBSOFT_EXPOR_SENHAS` | não | `true` mostra senhas PPPoE (padrão: mascaradas) |
